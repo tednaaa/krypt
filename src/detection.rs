@@ -141,6 +141,7 @@ impl Detector {
 				timeframe: Some("60s".to_string()),
 			},
 			timestamp: now,
+			exchange: "Binance".to_string(),
 		})
 	}
 
@@ -190,6 +191,7 @@ impl Detector {
 				timeframe: Some("60s".to_string()),
 			},
 			timestamp: now,
+			exchange: "Binance".to_string(),
 		})
 	}
 
@@ -243,6 +245,7 @@ impl Detector {
 				timeframe: Some("2m".to_string()),
 			},
 			timestamp: now,
+			exchange: "Binance".to_string(),
 		})
 	}
 
@@ -289,6 +292,7 @@ impl Detector {
 				timeframe: Some("3m".to_string()),
 			},
 			timestamp: now,
+			exchange: "Binance".to_string(),
 		})
 	}
 
@@ -330,6 +334,7 @@ impl Detector {
 				timeframe: Some("breakout".to_string()),
 			},
 			timestamp: now,
+			exchange: "Binance".to_string(),
 		})
 	}
 
@@ -371,6 +376,7 @@ impl Detector {
 				timeframe: Some("breakdown".to_string()),
 			},
 			timestamp: now,
+			exchange: "Binance".to_string(),
 		})
 	}
 
