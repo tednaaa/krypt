@@ -1,0 +1,3 @@
+- https://www.binance.com/en/binance-api
+- https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
+- https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info
