@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
-use serde_json::Value;
 use tokio::time::{interval, sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
@@ -80,7 +79,7 @@ impl BinanceStreamManager {
 						warn!("Failed to parse ticker message: {}", e);
 					},
 				},
-				Message::Ping(payload) => {
+				Message::Ping(_payload) => {
 					debug!("Received ping, sending pong");
 					// Pong is automatically sent by the library
 				},

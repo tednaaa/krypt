@@ -11,7 +11,7 @@ pub enum Tier {
 	Ignored,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MarketState {
 	Idle,
 	Accumulation,

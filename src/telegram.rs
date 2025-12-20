@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::Serialize;
 use std::collections::HashMap;
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 
 use crate::config::TelegramConfig;

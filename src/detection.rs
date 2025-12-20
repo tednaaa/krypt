@@ -1,6 +1,5 @@
 use crate::config::DetectionConfig;
 use crate::types::{current_timestamp, Alert, AlertDetails, AlertType, MarketState, SymbolData, Timestamp};
-use std::collections::VecDeque;
 
 pub struct Detector {
 	config: DetectionConfig,

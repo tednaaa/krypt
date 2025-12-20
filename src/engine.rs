@@ -1,10 +1,9 @@
-use anyhow::Result;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 use tracing::{debug, error, info, warn};
 
-use crate::config::{Config, FilterConfig};
+use crate::config::Config;
 use crate::detection::Detector;
 use crate::scoring::Scorer;
 use crate::types::{current_timestamp, Alert, MarketState, StreamMessage, SymbolData, TickerData, Tier, TradeData};
@@ -26,7 +25,7 @@ impl SignalEngine {
 
 	/// Process a ticker update for all symbols
 	pub fn process_ticker(&mut self, tickers: Vec<TickerData>) -> Vec<String> {
-		let mut tier1_symbols = Vec::new();
+		let tier1_symbols = Vec::new();
 
 		for ticker in tickers {
 			// Apply hard filters
@@ -37,7 +36,39 @@ impl SignalEngine {
 			// Update or create symbol data
 			let symbol = self.symbols.entry(ticker.symbol.clone()).or_insert_with(|| SymbolData::new(ticker.symbol.clone()));
 
-			self.update_symbol_from_ticker(symbol, &ticker);
+			// Parse values
+			let price = ticker.current_price.parse::<f64>().unwrap_or(0.0);
+			let price_change_pct = ticker.price_change_percent.parse::<f64>().unwrap_or(0.0);
+			let volume_24h = ticker.volume.parse::<f64>().unwrap_or(0.0);
+			let quote_volume_24h = ticker.quote_volume.parse::<f64>().unwrap_or(0.0);
+			let high_24h = ticker.high_price.parse::<f64>().unwrap_or(0.0);
+			let low_24h = ticker.low_price.parse::<f64>().unwrap_or(0.0);
+			let open_24h = ticker.open_price.parse::<f64>().unwrap_or(0.0);
+
+			let now = current_timestamp();
+
+			// Update basic fields
+			symbol.price = price;
+			symbol.price_change_pct_24h = price_change_pct;
+			symbol.volume_24h = volume_24h;
+			symbol.quote_volume_24h = quote_volume_24h;
+			symbol.trades_24h = ticker.number_of_trades;
+			symbol.high_24h = high_24h;
+			symbol.low_24h = low_24h;
+			symbol.open_24h = open_24h;
+			symbol.last_update_time = now;
+
+			// Update price window
+			symbol.price_window.push_back((now, price));
+			while symbol.price_window.len() > self.config.performance.price_window_size {
+				symbol.price_window.pop_front();
+			}
+
+			// Update volume window (use quote volume)
+			symbol.volume_window.push_back((now, quote_volume_24h));
+			while symbol.volume_window.len() > self.config.performance.price_window_size {
+				symbol.volume_window.pop_front();
+			}
 		}
 
 		tier1_symbols
@@ -45,23 +76,49 @@ impl SignalEngine {
 
 	/// Process a trade update for a specific symbol
 	pub fn process_trade(&mut self, trade: &TradeData) -> Vec<Alert> {
-		let symbol = match self.symbols.get_mut(&trade.symbol) {
-			Some(s) => s,
+		// Check if symbol exists and is Tier 1
+		let should_process = match self.symbols.get(&trade.symbol) {
+			Some(s) => s.tier == Tier::Tier1,
 			None => {
 				warn!("Received trade for unknown symbol: {}", trade.symbol);
 				return Vec::new();
 			},
 		};
 
-		// Only process trades for Tier 1 symbols
-		if symbol.tier != Tier::Tier1 {
+		if !should_process {
 			return Vec::new();
 		}
 
 		// Update CVD
-		self.update_cvd(symbol, trade);
+		let price = trade.price.parse::<f64>().unwrap_or(0.0);
+		let quantity = trade.quantity.parse::<f64>().unwrap_or(0.0);
 
-		// Run detection algorithms
+		if price != 0.0 && quantity != 0.0 {
+			let symbol = self.symbols.get_mut(&trade.symbol).unwrap();
+			let volume_usd = price * quantity;
+
+			// is_buyer_maker = true means this was a sell (maker was selling)
+			// is_buyer_maker = false means this was a buy (maker was buying)
+			let delta = if trade.is_buyer_maker {
+				-volume_usd // Sell
+			} else {
+				volume_usd // Buy
+			};
+
+			symbol.cvd += delta;
+
+			// Update CVD history
+			let now = current_timestamp();
+			symbol.cvd_history.push_back((now, symbol.cvd));
+
+			// Keep only recent history
+			while symbol.cvd_history.len() > self.config.performance.cvd_history_size {
+				symbol.cvd_history.pop_front();
+			}
+		}
+
+		// Run detection algorithms (separate borrow)
+		let symbol = self.symbols.get_mut(&trade.symbol).unwrap();
 		self.detector.detect(symbol)
 	}
 
@@ -154,73 +211,7 @@ impl SignalEngine {
 		true
 	}
 
-	/// Update symbol data from ticker
-	fn update_symbol_from_ticker(&mut self, symbol: &mut SymbolData, ticker: &TickerData) {
-		// Parse values
-		let price = ticker.current_price.parse::<f64>().unwrap_or(0.0);
-		let price_change_pct = ticker.price_change_percent.parse::<f64>().unwrap_or(0.0);
-		let volume_24h = ticker.volume.parse::<f64>().unwrap_or(0.0);
-		let quote_volume_24h = ticker.quote_volume.parse::<f64>().unwrap_or(0.0);
-		let high_24h = ticker.high_price.parse::<f64>().unwrap_or(0.0);
-		let low_24h = ticker.low_price.parse::<f64>().unwrap_or(0.0);
-		let open_24h = ticker.open_price.parse::<f64>().unwrap_or(0.0);
 
-		let now = current_timestamp();
-
-		// Update basic fields
-		symbol.price = price;
-		symbol.price_change_pct_24h = price_change_pct;
-		symbol.volume_24h = volume_24h;
-		symbol.quote_volume_24h = quote_volume_24h;
-		symbol.trades_24h = ticker.number_of_trades;
-		symbol.high_24h = high_24h;
-		symbol.low_24h = low_24h;
-		symbol.open_24h = open_24h;
-		symbol.last_update_time = now;
-
-		// Update price window
-		symbol.price_window.push_back((now, price));
-		while symbol.price_window.len() > self.config.performance.price_window_size {
-			symbol.price_window.pop_front();
-		}
-
-		// Update volume window (use quote volume)
-		symbol.volume_window.push_back((now, quote_volume_24h));
-		while symbol.volume_window.len() > self.config.performance.price_window_size {
-			symbol.volume_window.pop_front();
-		}
-	}
-
-	/// Update CVD from trade data
-	fn update_cvd(&mut self, symbol: &mut SymbolData, trade: &TradeData) {
-		let price = trade.price.parse::<f64>().unwrap_or(0.0);
-		let quantity = trade.quantity.parse::<f64>().unwrap_or(0.0);
-
-		if price == 0.0 || quantity == 0.0 {
-			return;
-		}
-
-		let volume_usd = price * quantity;
-
-		// is_buyer_maker = true means this was a sell (maker was selling)
-		// is_buyer_maker = false means this was a buy (maker was buying)
-		let delta = if trade.is_buyer_maker {
-			-volume_usd // Sell
-		} else {
-			volume_usd // Buy
-		};
-
-		symbol.cvd += delta;
-
-		// Update CVD history
-		let now = current_timestamp();
-		symbol.cvd_history.push_back((now, symbol.cvd));
-
-		// Keep only recent history
-		while symbol.cvd_history.len() > self.config.performance.cvd_history_size {
-			symbol.cvd_history.pop_front();
-		}
-	}
 
 	/// Get statistics about the engine state
 	pub fn get_stats(&self) -> EngineStats {

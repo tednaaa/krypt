@@ -7,4 +7,8 @@
 }:
 {
   languages.rust.enable = true;
+
+  packages = [
+    pkgs.openssl
+  ];
 }
