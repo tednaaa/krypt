@@ -1,0 +1,6 @@
+services:
+  krypt:
+    image: ghcr.io/tednaaa/krypt:v1.0.0
+    restart: unless-stopped
+    volumes:
+      - ./config.toml:/app/config.toml:ro

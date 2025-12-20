@@ -1,17 +1,20 @@
+## Research
+
+- https://www.binance.com/en/binance-api
+- https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
+- https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info
+
 ## Release
 
 - Create tag, it will push docker image to github registry
 - In server run this to update
+- do not forget to create config.toml from example and fill credentials
 
 ```bash
 URL=ghcr.io/tednaaa/krypt:v1.0.0
 docker pull $URL
 docker run -d --restart unless-stopped $URL
 ```
-
-- https://www.binance.com/en/binance-api
-- https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
-- https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info
 
 ## Setup
 
