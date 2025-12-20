@@ -1,3 +1,7 @@
+- https://www.binance.com/en/binance-api
+- https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
+- https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info
+
 # Krypt - Real-Time Crypto Market Scanner
 
 A high-performance, real-time cryptocurrency market scanner built in Rust that monitors Binance USDT pairs, detects pump/dump patterns and accumulation/distribution phases, and sends instant Telegram alerts.
