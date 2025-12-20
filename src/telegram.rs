@@ -205,6 +205,7 @@ mod tests {
 			price: 50000.0,
 			details: AlertDetails { price_change_pct: Some(5.0), volume_ratio: None, cvd_change: None, timeframe: None },
 			timestamp: 1000,
+			exchange: "Binance".to_string(),
 		};
 
 		let long_alert = Alert {
@@ -213,6 +214,7 @@ mod tests {
 			price: 3000.0,
 			details: AlertDetails { price_change_pct: Some(2.0), volume_ratio: None, cvd_change: None, timeframe: None },
 			timestamp: 1001,
+			exchange: "Binance".to_string(),
 		};
 
 		queue.push(pump_alert.clone());
@@ -243,6 +245,7 @@ mod tests {
 			price: 50000.0,
 			details: AlertDetails { price_change_pct: Some(5.0), volume_ratio: None, cvd_change: None, timeframe: None },
 			timestamp: 1000,
+			exchange: "Binance".to_string(),
 		};
 
 		// First alert should pass cooldown check

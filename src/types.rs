@@ -144,6 +144,7 @@ pub struct Alert {
 	pub price: f64,
 	pub details: AlertDetails,
 	pub timestamp: Timestamp,
+	pub exchange: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -184,7 +185,16 @@ impl Alert {
 			AlertType::ShortSetupConfirmed => "SHORT SETUP CONFIRMED",
 		};
 
-		let mut message = format!("{} {}\nSymbol: {}\nPrice: ${:.8}", emoji, alert_name, self.symbol, self.price);
+		// Generate coinglass link based on exchange
+		let coinglass_url = self.get_coinglass_url();
+
+		let mut message = format!("<code>{emoji} {alert_name}</code>\n");
+		message.push_str(&format!("Exchange: {}\n", self.exchange));
+		message.push_str(&format!("Symbol: <a href=\"{}\">{}</a>\n\n", coinglass_url, self.symbol));
+
+		// Start code block
+		message.push_str("<pre>");
+		message.push_str(&format!("Price: ${:.8}", self.price));
 
 		if let Some(pct) = self.details.price_change_pct {
 			message.push_str(&format!(" ({:+.2}%)", pct));
@@ -205,7 +215,19 @@ impl Alert {
 		let time = format_timestamp(self.timestamp);
 		message.push_str(&format!("\nTime: {}", time));
 
+		// End code block
+		message.push_str("</pre>");
+
 		message
+	}
+
+	fn get_coinglass_url(&self) -> String {
+		match self.exchange.as_str() {
+			"Binance" => format!("https://www.coinglass.com/tv/Binance_{}", self.symbol),
+			"Bybit" => format!("https://www.coinglass.com/tv/Bybit_{}", self.symbol),
+			"OKX" => format!("https://www.coinglass.com/tv/OKX_{}", self.symbol),
+			_ => format!("https://www.coinglass.com/tv/{}_{}", self.exchange, self.symbol),
+		}
 	}
 }
 
@@ -217,4 +239,65 @@ pub fn format_timestamp(ts: Timestamp) -> String {
 	let datetime =
 		chrono::DateTime::from_timestamp(ts as i64, 0).unwrap_or_else(|| chrono::DateTime::from_timestamp(0, 0).unwrap());
 	datetime.format("%H:%M:%S UTC").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_alert_format_telegram() {
+		let alert = Alert {
+			alert_type: AlertType::AccumulationDetected,
+			symbol: "RESOLVUSDT".to_string(),
+			price: 0.08940000,
+			details: AlertDetails {
+				price_change_pct: Some(0.11),
+				volume_ratio: Some(86547.1),
+				cvd_change: Some(6.35),
+				timeframe: Some("2m".to_string()),
+			},
+			timestamp: 1704558271, // This will show as 19:44:31 UTC
+			exchange: "Binance".to_string(),
+		};
+
+		let formatted = alert.format_telegram();
+
+		// Print the formatted message
+		println!("\n=== Telegram Message Format ===\n{}\n", formatted);
+
+		// Assertions to verify format
+		assert!(formatted.contains("<code>📊 ACCUMULATION DETECTED</code>"));
+		assert!(formatted.contains("Exchange: Binance"));
+		assert!(formatted.contains("<a href=\"https://www.coinglass.com/tv/Binance_RESOLVUSDT\">RESOLVUSDT</a>"));
+		assert!(formatted.contains("Price: $0.08940000 (+0.11%)"));
+		assert!(formatted.contains("Volume: 86547.1x average"));
+		assert!(formatted.contains("CVD Change: 6.35"));
+		assert!(formatted.contains("Timeframe: 2m"));
+		assert!(formatted.contains("<pre>"));
+		assert!(formatted.contains("</pre>"));
+	}
+
+	#[test]
+	fn test_coinglass_urls() {
+		let test_cases = vec![
+			("Binance", "BTCUSDT", "https://www.coinglass.com/tv/Binance_BTCUSDT"),
+			("Bybit", "ETHUSDT", "https://www.coinglass.com/tv/Bybit_ETHUSDT"),
+			("OKX", "SOLUSDT", "https://www.coinglass.com/tv/OKX_SOLUSDT"),
+		];
+
+		for (exchange, symbol, expected_url) in test_cases {
+			let alert = Alert {
+				alert_type: AlertType::PumpDetected,
+				symbol: symbol.to_string(),
+				price: 100.0,
+				details: AlertDetails { price_change_pct: None, volume_ratio: None, cvd_change: None, timeframe: None },
+				timestamp: 1000,
+				exchange: exchange.to_string(),
+			};
+
+			let url = alert.get_coinglass_url();
+			assert_eq!(url, expected_url, "URL mismatch for exchange: {}", exchange);
+		}
+	}
 }
