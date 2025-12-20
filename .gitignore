@@ -9,6 +9,9 @@ devenv.local.yaml
 # pre-commit
 .pre-commit-config.yaml
 
+# Configuration with credentials
+config.toml
+.env
 
 # Added by cargo
 

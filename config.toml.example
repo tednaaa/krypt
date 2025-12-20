@@ -1,0 +1,50 @@
+# Crypto Market Scanner Configuration
+
+[binance]
+ws_url = "wss://stream.binance.com:9443/ws"
+
+[filters]
+min_quote_volume = 10_000_000.0  # 10M USDT
+min_price = 0.0001
+min_trades_24h = 5000
+stale_data_threshold_secs = 10
+
+[scoring]
+tier1_threshold = 0.7
+tier2_threshold = 0.4
+max_tier1_symbols = 20
+rescore_interval_secs = 10
+
+[scoring.weights]
+volume_weight = 0.4
+volatility_weight = 0.4
+activity_weight = 0.2
+
+[detection]
+pump_threshold_pct = 3.0
+dump_threshold_pct = -3.0
+accumulation_range_pct = 0.4
+volume_spike_ratio = 2.0
+breakout_threshold_pct = 0.5
+window_size_secs = 60
+accumulation_window_secs = 120
+distribution_window_secs = 180
+
+[telegram]
+bot_token = "YOUR_BOT_TOKEN_HERE"
+chat_id = "YOUR_CHAT_ID_HERE"
+alert_cooldown_secs = 300  # 5 minutes
+max_alerts_per_minute = 10
+
+[performance]
+ticker_channel_size = 1000
+trade_channel_size = 1000
+alert_channel_size = 100
+price_window_size = 60
+cvd_history_size = 300  # 5 minutes at 1 update/sec
+
+[websocket]
+ping_interval_secs = 180  # 3 minutes
+reconnect_base_delay_secs = 1
+reconnect_max_delay_secs = 30
+target_latency_ms = 500
