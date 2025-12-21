@@ -428,7 +428,7 @@ async fn run_pivot_update_task(
 
 			if let Some(exchange) = exchange {
 				// Fetch historical candles for pivot calculation
-				let interval = format!("{pivot_interval_mins}m");
+				let interval = exchange.format_interval(pivot_interval_mins as u32);
 				match exchange.fetch_historical_candles(symbol, &interval, 10).await {
 					Ok(candles) => {
 						let mut manager = tracker_manager.write().await;

@@ -220,6 +220,28 @@ impl Exchange for BinanceExchange {
 
 		Ok(candles)
 	}
+
+	fn format_interval(&self, minutes: u32) -> String {
+		// Binance uses format: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
+		match minutes {
+			1 => "1m".to_string(),
+			3 => "3m".to_string(),
+			5 => "5m".to_string(),
+			15 => "15m".to_string(),
+			30 => "30m".to_string(),
+			60 => "1h".to_string(),
+			120 => "2h".to_string(),
+			240 => "4h".to_string(),
+			360 => "6h".to_string(),
+			480 => "8h".to_string(),
+			720 => "12h".to_string(),
+			1440 => "1d".to_string(),
+			4320 => "3d".to_string(),
+			10080 => "1w".to_string(),
+			43200 => "1M".to_string(),
+			_ => format!("{minutes}m"),
+		}
+	}
 }
 
 // Helper function to parse Binance symbols

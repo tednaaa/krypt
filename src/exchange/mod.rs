@@ -30,6 +30,12 @@ pub trait Exchange: Send + Sync {
 	/// Fetches historical candles for pivot calculation
 	async fn fetch_historical_candles(&self, symbol: &Symbol, interval: &str, limit: u32) -> Result<Vec<Candle>>;
 
+	/// Formats interval from minutes to exchange-specific format
+	/// Default implementation returns minutes as string (e.g., "60")
+	fn format_interval(&self, minutes: u32) -> String {
+		minutes.to_string()
+	}
+
 	/// Checks if exchange supports the given symbol
 	#[allow(dead_code)]
 	fn supports_symbol(&self, symbol: &Symbol) -> bool {
