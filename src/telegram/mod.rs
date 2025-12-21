@@ -68,22 +68,19 @@ impl TelegramBot {
 		let derivatives = &qualification.derivatives_details;
 		let oi_str = derivatives
 			.oi_increase_pct
-			.map(|v| format!("Open Interest: +{:.1}%", v))
-			.unwrap_or_else(|| "Open Interest: N/A".to_string());
+			.map_or_else(|| "Open Interest: N/A".to_string(), |v| format!("Open Interest: +{v:.1}%"));
 
-		let funding_str = derivatives
-			.funding_rate
-			.map(|v| format!("Funding: {:.3}%", v * 100.0))
-			.unwrap_or_else(|| "Funding: N/A".to_string());
+		let funding_str =
+			derivatives.funding_rate.map_or_else(|| "Funding: N/A".to_string(), |v| format!("Funding: {:.3}%", v * 100.0));
 
-		let ls_ratio_str = derivatives
-			.long_ratio
-			.map(|r| {
+		let ls_ratio_str = derivatives.long_ratio.map_or_else(
+			|| "Long / Short: N/A".to_string(),
+			|r| {
 				let long_pct = r * 100.0;
 				let short_pct = (1.0 - r) * 100.0;
-				format!("Long / Short: {:.0}% / {:.0}%", long_pct, short_pct)
-			})
-			.unwrap_or_else(|| "Long / Short: N/A".to_string());
+				format!("Long / Short: {long_pct:.0}% / {short_pct:.0}%")
+			},
+		);
 
 		// Format technical context
 		let technical_context = qualification.technical_context();
@@ -98,29 +95,19 @@ impl TelegramBot {
 
 		// Format the complete message
 		format!(
-			"🚨 <b>PUMP DETECTED — {}</b>\n\
+			"🚨 <b>PUMP DETECTED — {symbol_display}</b>\n\
 			\n\
-			<b>Price:</b> {:.2} USDT (+{:.1}% in {}m)\n\
-			<b>Volume:</b> x{:.1} vs average\n\
+			<b>Price:</b> {price:.2} USDT (+{change_pct:.1}% in {time_mins}m)\n\
+			<b>Volume:</b> x{volume_ratio:.1} vs average\n\
 			\n\
-			{}\n\
-			{}\n\
-			{}\n\
+			{oi_str}\n\
+			{funding_str}\n\
+			{ls_ratio_str}\n\
 			\n\
 			📍 <b>Technical context:</b>\n\
-			{}\n\
+			{technical_str}\n\
 			\n\
-			🔗 <a href=\"{}\">Coinglass</a>",
-			symbol_display,
-			price,
-			change_pct,
-			time_mins,
-			volume_ratio,
-			oi_str,
-			funding_str,
-			ls_ratio_str,
-			technical_str,
-			coinglass_url
+			🔗 <a href=\"{coinglass_url}\">Coinglass</a>"
 		)
 	}
 
@@ -147,15 +134,16 @@ impl TelegramBot {
 }
 
 /// Formats price with appropriate precision
+#[cfg(test)]
 fn format_price(price: f64) -> String {
 	if price >= 1000.0 {
-		format!("{:.2}", price)
+		format!("{price:.2}")
 	} else if price >= 1.0 {
-		format!("{:.3}", price)
+		format!("{price:.3}")
 	} else if price >= 0.01 {
-		format!("{:.4}", price)
+		format!("{price:.4}")
 	} else {
-		format!("{:.6}", price)
+		format!("{price:.6}")
 	}
 }
 

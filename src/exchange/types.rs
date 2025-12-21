@@ -13,16 +13,13 @@ impl Symbol {
 		Self { base: base.into(), quote: quote.into(), exchange: exchange.into() }
 	}
 
+	#[allow(dead_code)]
 	pub fn pair(&self) -> String {
 		format!("{}/{}", self.base, self.quote)
 	}
 
 	pub fn exchange_symbol(&self) -> String {
-		match self.exchange.as_str() {
-			"binance" => format!("{}{}", self.base, self.quote),
-			"bybit" => format!("{}{}", self.base, self.quote),
-			_ => format!("{}{}", self.base, self.quote),
-		}
+		format!("{}{}", self.base, self.quote)
 	}
 }
 
@@ -45,10 +42,12 @@ pub struct Candle {
 }
 
 impl Candle {
+	#[allow(dead_code)]
 	pub fn typical_price(&self) -> f64 {
 		(self.high + self.low + self.close) / 3.0
 	}
 
+	#[allow(dead_code)]
 	pub fn range_pct(&self) -> f64 {
 		if self.low > 0.0 {
 			((self.high - self.low) / self.low) * 100.0
@@ -76,6 +75,7 @@ pub struct DerivativesMetrics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_field_names)]
 pub struct LongShortRatio {
 	pub long_account_pct: f64,
 	pub short_account_pct: f64,
@@ -88,6 +88,7 @@ impl LongShortRatio {
 		self.long_account_pct / (self.long_account_pct + self.short_account_pct)
 	}
 
+	#[allow(dead_code)]
 	pub fn position_ratio(&self) -> f64 {
 		self.long_position_pct / (self.long_position_pct + self.short_position_pct)
 	}
@@ -103,6 +104,7 @@ pub struct Ticker {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct PriceSnapshot {
 	pub symbol: Symbol,
 	pub timestamp: DateTime<Utc>,
@@ -113,7 +115,9 @@ pub struct PriceSnapshot {
 #[derive(Debug, Clone)]
 pub enum ExchangeMessage {
 	Candle(Candle),
+	#[allow(dead_code)]
 	MarkPrice(MarkPrice),
+	#[allow(dead_code)]
 	Ticker(Ticker),
 	Error(String),
 }

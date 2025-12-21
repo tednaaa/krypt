@@ -149,6 +149,7 @@ async fn main() -> Result<()> {
 				let before_count = manager.count();
 				manager.cleanup_stale(1800); // Remove trackers older than 30 minutes
 				let after_count = manager.count();
+				drop(manager);
 
 				if before_count != after_count {
 					info!("Cleaned up {} stale trackers ({} -> {})", before_count - after_count, before_count, after_count);
@@ -220,6 +221,7 @@ async fn process_candle(
 
 	// Skip if in cooldown
 	if tracker.is_in_cooldown(cooldown_secs) {
+		drop(manager);
 		return;
 	}
 
@@ -264,6 +266,7 @@ async fn process_candle(
 
 	// Update pump candidate state
 	pump_detector.update_candidate(tracker);
+	drop(manager);
 }
 
 /// Runs the derivatives metrics polling task
@@ -276,7 +279,7 @@ async fn run_derivatives_polling_task(
 	let mut poll_interval = interval(Duration::from_secs(poll_interval_secs));
 
 	// Create exchange instances for REST API calls
-	let exchanges = vec![create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
+	let exchanges = [create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
 
 	info!("Starting derivatives polling (interval: {}s)", poll_interval_secs);
 
@@ -325,7 +328,7 @@ async fn run_pivot_update_task(
 	let mut update_interval = interval(Duration::from_secs(pivot_interval_mins * 60));
 
 	// Create exchange instances for REST API calls
-	let exchanges = vec![create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
+	let exchanges = [create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
 
 	info!("Starting pivot update task (interval: {}m)", pivot_interval_mins);
 
@@ -338,7 +341,7 @@ async fn run_pivot_update_task(
 
 			if let Some(exchange) = exchange {
 				// Fetch historical candles for pivot calculation
-				let interval = format!("{}m", pivot_interval_mins);
+				let interval = format!("{pivot_interval_mins}m");
 				match exchange.fetch_historical_candles(symbol, &interval, 10).await {
 					Ok(candles) => {
 						let mut manager = tracker_manager.write().await;

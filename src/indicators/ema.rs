@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 
 /// Exponential Moving Average calculator
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct EMA {
 	period: usize,
 	multiplier: f64,
@@ -26,7 +27,16 @@ impl EMA {
 
 	/// Updates the EMA with a new price
 	pub fn update(&mut self, price: f64) -> Option<f64> {
-		if !self.is_initialized {
+		if self.is_initialized {
+			// EMA formula: EMA = (Price - EMA_prev) * multiplier + EMA_prev
+			if let Some(prev_ema) = self.current_value {
+				let ema = (price - prev_ema).mul_add(self.multiplier, prev_ema);
+				self.current_value = Some(ema);
+				Some(ema)
+			} else {
+				None
+			}
+		} else {
 			self.price_buffer.push_back(price);
 
 			if self.price_buffer.len() >= self.period {
@@ -39,34 +49,28 @@ impl EMA {
 			}
 
 			None
-		} else {
-			// EMA formula: EMA = (Price - EMA_prev) * multiplier + EMA_prev
-			if let Some(prev_ema) = self.current_value {
-				let ema = (price - prev_ema) * self.multiplier + prev_ema;
-				self.current_value = Some(ema);
-				Some(ema)
-			} else {
-				None
-			}
 		}
 	}
 
 	/// Returns the current EMA value
-	pub fn value(&self) -> Option<f64> {
+	pub const fn value(&self) -> Option<f64> {
 		self.current_value
 	}
 
 	/// Returns true if the EMA has been initialized
-	pub fn is_ready(&self) -> bool {
+	#[allow(dead_code)]
+	pub const fn is_ready(&self) -> bool {
 		self.is_initialized
 	}
 
 	/// Returns the period
-	pub fn period(&self) -> usize {
+	#[allow(dead_code)]
+	pub const fn period(&self) -> usize {
 		self.period
 	}
 
 	/// Resets the EMA calculator
+	#[allow(dead_code)]
 	pub fn reset(&mut self) {
 		self.current_value = None;
 		self.is_initialized = false;
@@ -105,51 +109,54 @@ impl MultiEMA {
 	}
 
 	/// Returns all EMA values as a vector of (period, value) tuples
+	#[allow(dead_code)]
 	pub fn all_values(&self) -> Vec<(u32, Option<f64>)> {
 		self.emas.iter().map(|(p, ema)| (*p, ema.value())).collect()
 	}
 
 	/// Returns true if all EMAs are ready
+	#[allow(dead_code)]
 	pub fn all_ready(&self) -> bool {
 		self.emas.iter().all(|(_, ema)| ema.is_ready())
 	}
 
 	/// Returns true if at least one EMA is ready
+	#[allow(dead_code)]
 	pub fn any_ready(&self) -> bool {
 		self.emas.iter().any(|(_, ema)| ema.is_ready())
 	}
 
 	/// Checks if price is extended above a specific EMA
+	#[allow(dead_code)]
 	pub fn is_price_above(&self, price: f64, period: u32, threshold_pct: f64) -> bool {
-		if let Some(ema_value) = self.get(period) {
+		self.get(period).is_some_and(|ema_value| {
 			let extension_pct = ((price - ema_value) / ema_value) * 100.0;
 			extension_pct > threshold_pct
-		} else {
-			false
-		}
+		})
 	}
 
 	/// Checks if price is extended below a specific EMA
+	#[allow(dead_code)]
 	pub fn is_price_below(&self, price: f64, period: u32, threshold_pct: f64) -> bool {
-		if let Some(ema_value) = self.get(period) {
+		self.get(period).is_some_and(|ema_value| {
 			let extension_pct = ((ema_value - price) / ema_value) * 100.0;
 			extension_pct > threshold_pct
-		} else {
-			false
-		}
+		})
 	}
 
 	/// Checks if price is above multiple EMAs
 	pub fn price_above_emas(&self, price: f64, periods: &[u32]) -> bool {
-		periods.iter().all(|&period| if let Some(ema_value) = self.get(period) { price > ema_value } else { false })
+		periods.iter().all(|&period| self.get(period).is_some_and(|ema_value| price > ema_value))
 	}
 
 	/// Checks if price is below multiple EMAs
+	#[allow(dead_code)]
 	pub fn price_below_emas(&self, price: f64, periods: &[u32]) -> bool {
-		periods.iter().all(|&period| if let Some(ema_value) = self.get(period) { price < ema_value } else { false })
+		periods.iter().all(|&period| self.get(period).is_some_and(|ema_value| price < ema_value))
 	}
 
 	/// Resets all EMAs
+	#[allow(dead_code)]
 	pub fn reset(&mut self) {
 		for (_, ema) in &mut self.emas {
 			ema.reset();
@@ -176,7 +183,7 @@ mod tests {
 		let value = ema.update(12.0);
 		assert!(ema.is_ready());
 		assert!(value.is_some());
-		assert_eq!(value.unwrap(), 11.0); // SMA of 10, 11, 12
+		assert!((value.unwrap() - 11.0).abs() < 1e-10); // SMA of 10, 11, 12
 	}
 
 	#[test]
@@ -187,12 +194,12 @@ mod tests {
 		ema.update(10.0);
 		ema.update(11.0);
 		let initial = ema.update(12.0).unwrap();
-		assert_eq!(initial, 11.0);
+		assert!((initial - 11.0).abs() < 1e-10);
 
 		// Next update should use EMA formula
 		let next = ema.update(15.0).unwrap();
 		// EMA = (15 - 11) * 0.5 + 11 = 13.0
-		assert_eq!(next, 13.0);
+		assert!((next - 13.0).abs() < 1e-10);
 	}
 
 	#[test]
@@ -201,7 +208,7 @@ mod tests {
 
 		// Update with some prices
 		for price in 10..40 {
-			multi.update(price as f64);
+			multi.update(f64::from(price));
 		}
 
 		// Check that shorter period EMA reacts faster

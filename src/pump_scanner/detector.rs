@@ -10,7 +10,7 @@ pub struct PumpDetector {
 }
 
 impl PumpDetector {
-	pub fn new(config: PumpConfig) -> Self {
+	pub const fn new(config: PumpConfig) -> Self {
 		Self { config }
 	}
 
@@ -92,29 +92,27 @@ impl PumpDetector {
 		let volume_ratio = self.calculate_volume_ratio(tracker, price_change.time_elapsed_mins * 60);
 
 		// If volume multiplier is set to 0 or very low, skip volume check
-		if self.config.volume_multiplier > 0.5 {
-			if volume_ratio < self.config.volume_multiplier {
-				// For shitcoins and low liquidity, allow pumps with lower volume if price change is significant
-				let is_significant_pump = price_change.change_pct >= self.config.price_threshold_pct * 1.5;
-				let has_some_volume = volume_ratio >= 1.0;
+		if self.config.volume_multiplier > 0.5 && volume_ratio < self.config.volume_multiplier {
+			// For shitcoins and low liquidity, allow pumps with lower volume if price change is significant
+			let is_significant_pump = price_change.change_pct >= self.config.price_threshold_pct * 1.5;
+			let has_some_volume = volume_ratio >= 1.0;
 
-				if !(is_significant_pump && has_some_volume) {
-					debug!(
-						symbol = %tracker.symbol,
-						volume_ratio = volume_ratio,
-						threshold = self.config.volume_multiplier,
-						price_change = price_change.change_pct,
-						"Volume spike insufficient and not a significant pump"
-					);
-					return false;
-				} else {
-					debug!(
-						symbol = %tracker.symbol,
-						volume_ratio = volume_ratio,
-						price_change = price_change.change_pct,
-						"Allowing pump with lower volume due to significant price change"
-					);
-				}
+			if is_significant_pump && has_some_volume {
+				debug!(
+					symbol = %tracker.symbol,
+					volume_ratio = volume_ratio,
+					price_change = price_change.change_pct,
+					"Allowing pump with lower volume due to significant price change"
+				);
+			} else {
+				debug!(
+					symbol = %tracker.symbol,
+					volume_ratio = volume_ratio,
+					threshold = self.config.volume_multiplier,
+					price_change = price_change.change_pct,
+					"Volume spike insufficient and not a significant pump"
+				);
+				return false;
 			}
 		}
 
@@ -170,6 +168,7 @@ pub struct PumpCandidate {
 
 impl PumpCandidate {
 	/// Returns a human-readable summary
+	#[allow(dead_code)]
 	pub fn summary(&self) -> String {
 		format!(
 			"{} pumped {:.2}% in {}m with {:.1}x volume",
@@ -209,7 +208,7 @@ mod tests {
 		// Add pump movement: 5% increase in 10 minutes with 3x volume
 		let pump_start = Utc::now() - Duration::minutes(10);
 		for i in 0..10 {
-			let price = 50000.0 + (i as f64 * 278.0); // 5% increase over 10 candles (2500/9 ≈ 278)
+			let price = (i as f64).mul_add(278.0, 50000.0); // 5% increase over 10 candles (2500/9 ≈ 278)
 			let volume = 3000.0; // 3x volume
 			let candle = create_test_candle(symbol.clone(), price, volume, pump_start + Duration::minutes(i));
 			tracker.update_from_candle(&candle);
@@ -234,7 +233,7 @@ mod tests {
 		// Add candles with only 2% increase (below threshold)
 		let base_time = Utc::now() - Duration::minutes(10);
 		for i in 0..10 {
-			let price = 50000.0 + (i as f64 * 100.0); // 2% increase
+			let price = (i as f64).mul_add(100.0, 50000.0); // 2% increase
 			let candle = create_test_candle(symbol.clone(), price, 3000.0, base_time + Duration::minutes(i));
 			tracker.update_from_candle(&candle);
 		}
@@ -261,7 +260,7 @@ mod tests {
 		// Add pump movement but with low volume
 		let pump_start = Utc::now() - Duration::minutes(10);
 		for i in 0..10 {
-			let price = 50000.0 + (i as f64 * 250.0); // 5% increase
+			let price = (i as f64).mul_add(250.0, 50000.0); // 5% increase
 			let volume = 1000.0; // Same volume (no spike)
 			let candle = create_test_candle(symbol.clone(), price, volume, pump_start + Duration::minutes(i));
 			tracker.update_from_candle(&candle);

@@ -109,7 +109,7 @@ impl Exchange for BybitExchange {
 					_ => interval,
 				};
 				let symbol_str = symbol.exchange_symbol();
-				topics.push(format!("kline.{}.{}", interval_num, symbol_str));
+				topics.push(format!("kline.{interval_num}.{symbol_str}"));
 			}
 		}
 
@@ -137,7 +137,7 @@ impl Exchange for BybitExchange {
 
 							// Check if it's a kline update
 							if json.get("topic").is_some() {
-								if let Some(candle) = BybitExchange::parse_kline_message(&json) {
+								if let Some(candle) = Self::parse_kline_message(&json) {
 									return Some(ExchangeMessage::Candle(candle));
 								}
 							}
@@ -145,18 +145,17 @@ impl Exchange for BybitExchange {
 						},
 						Err(e) => {
 							tracing::warn!("Failed to parse Bybit message: {}", e);
-							Some(ExchangeMessage::Error(format!("Parse error: {}", e)))
+							Some(ExchangeMessage::Error(format!("Parse error: {e}")))
 						},
 					}
 				},
-				Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => None,
 				Ok(Message::Close(_)) => {
 					tracing::info!("Bybit WebSocket closed");
 					Some(ExchangeMessage::Error("Connection closed".to_string()))
 				},
 				Err(e) => {
 					tracing::error!("Bybit WebSocket error: {}", e);
-					Some(ExchangeMessage::Error(format!("WebSocket error: {}", e)))
+					Some(ExchangeMessage::Error(format!("WebSocket error: {e}")))
 				},
 				_ => None,
 			}
@@ -288,6 +287,7 @@ struct InstrumentsResult {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InstrumentInfo {
+	#[allow(dead_code)]
 	symbol: String,
 	contract_type: String,
 	status: String,
@@ -312,6 +312,7 @@ struct OpenInterestResult {
 #[serde(rename_all = "camelCase")]
 struct OpenInterestData {
 	open_interest: String,
+	#[allow(dead_code)]
 	timestamp: String,
 }
 
@@ -331,6 +332,7 @@ struct TickerResult {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TickerData {
+	#[allow(dead_code)]
 	symbol: String,
 	mark_price: String,
 	funding_rate: String,
@@ -339,7 +341,9 @@ struct TickerData {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LongShortRatioResponse {
+	#[allow(dead_code)]
 	ret_code: i32,
+	#[allow(dead_code)]
 	ret_msg: String,
 	result: LongShortRatioResult,
 }
@@ -354,6 +358,7 @@ struct LongShortRatioResult {
 struct LongShortRatioData {
 	buy_ratio: String,
 	sell_ratio: String,
+	#[allow(dead_code)]
 	timestamp: String,
 }
 

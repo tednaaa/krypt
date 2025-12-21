@@ -59,7 +59,7 @@ impl SymbolTracker {
 
 		// Keep last 20 minutes of price data (to support 15 min detection window + buffer)
 		let cutoff = candle.timestamp - Duration::seconds(1200);
-		while self.price_history.front().map_or(false, |p| p.timestamp < cutoff) {
+		while self.price_history.front().is_some_and(|p| p.timestamp < cutoff) {
 			self.price_history.pop_front();
 		}
 
@@ -101,7 +101,7 @@ impl SymbolTracker {
 		}
 
 		let now = self.last_update;
-		let window_start = now - Duration::seconds(window_secs as i64);
+		let window_start = now - Duration::seconds(i64::try_from(window_secs).unwrap_or(i64::MAX));
 
 		// Find first price point within window
 		let start_point = self.price_history.iter().find(|p| p.timestamp >= window_start)?;
@@ -115,7 +115,7 @@ impl SymbolTracker {
 			start_price: start_point.price,
 			end_price: end_point.price,
 			change_pct: price_change_pct,
-			time_elapsed_mins: time_elapsed_mins as u64,
+			time_elapsed_mins: u64::try_from(time_elapsed_mins).unwrap_or(0),
 			start_time: start_point.timestamp,
 			end_time: end_point.timestamp,
 		})
@@ -166,7 +166,7 @@ impl SymbolTracker {
 
 	/// Gets volume within a specific time window (in seconds)
 	pub fn volume_in_window(&self, window_secs: u64) -> f64 {
-		let cutoff = self.last_update - Duration::seconds(window_secs as i64);
+		let cutoff = self.last_update - Duration::seconds(i64::try_from(window_secs).unwrap_or(i64::MAX));
 		self.price_history.iter().filter(|p| p.timestamp >= cutoff).map(|p| p.volume).sum()
 	}
 
@@ -207,7 +207,10 @@ impl SymbolTracker {
 
 	/// Gets current long ratio
 	pub fn long_ratio(&self) -> Option<f64> {
-		self.last_derivatives.as_ref().and_then(|d| d.long_short_ratio.as_ref().map(|r| r.account_ratio()))
+		self
+			.last_derivatives
+			.as_ref()
+			.and_then(|d| d.long_short_ratio.as_ref().map(super::super::exchange::types::LongShortRatio::account_ratio))
 	}
 
 	/// Checks if price is extended above key EMAs
@@ -219,17 +222,20 @@ impl SymbolTracker {
 	pub fn is_near_pivot_resistance(&self, price: f64, threshold_pct: f64) -> Option<String> {
 		let pivots = self.pivot_levels.as_ref()?;
 
-		if let Some(level) = pivots.is_near_resistance(price, threshold_pct) {
-			Some(format!("Pivot {}", level))
-		} else if pivots.is_extended_to_resistance(price) {
-			Some("Above R1".to_string())
-		} else {
-			None
-		}
+		pivots.is_near_resistance(price, threshold_pct).map_or_else(
+			|| {
+				if pivots.is_extended_to_resistance(price) {
+					Some("Above R1".to_string())
+				} else {
+					None
+				}
+			},
+			|level| Some(format!("Pivot {level}")),
+		)
 	}
 
 	/// Resets pump state to normal
-	pub fn reset_pump_state(&mut self) {
+	pub const fn reset_pump_state(&mut self) {
 		self.pump_state = PumpState::Normal;
 	}
 
@@ -241,12 +247,10 @@ impl SymbolTracker {
 
 	/// Checks if symbol is in cooldown period
 	pub fn is_in_cooldown(&self, cooldown_secs: u64) -> bool {
-		if let Some(last_alert) = self.last_alert_time {
+		self.last_alert_time.is_some_and(|last_alert| {
 			let elapsed = (Utc::now() - last_alert).num_seconds();
-			elapsed < cooldown_secs as i64
-		} else {
-			false
-		}
+			elapsed < i64::try_from(cooldown_secs).unwrap_or(i64::MAX)
+		})
 	}
 
 	/// Gets current price
@@ -258,10 +262,13 @@ impl SymbolTracker {
 #[derive(Debug, Clone)]
 pub struct PriceChange {
 	pub start_price: f64,
+	#[allow(dead_code)]
 	pub end_price: f64,
 	pub change_pct: f64,
 	pub time_elapsed_mins: u64,
+	#[allow(dead_code)]
 	pub start_time: DateTime<Utc>,
+	#[allow(dead_code)]
 	pub end_time: DateTime<Utc>,
 }
 
@@ -282,6 +289,7 @@ impl TrackerManager {
 	}
 
 	/// Gets a tracker for a symbol if it exists
+	#[allow(dead_code)]
 	pub fn get(&self, symbol: &Symbol) -> Option<&SymbolTracker> {
 		self.trackers.get(symbol)
 	}
@@ -292,18 +300,20 @@ impl TrackerManager {
 	}
 
 	/// Returns all trackers
+	#[allow(dead_code)]
 	pub fn all(&self) -> impl Iterator<Item = &SymbolTracker> {
 		self.trackers.values()
 	}
 
-	/// Returns all mutable trackers
+	/// Returns all trackers mutably
+	#[allow(dead_code)]
 	pub fn all_mut(&mut self) -> impl Iterator<Item = &mut SymbolTracker> {
 		self.trackers.values_mut()
 	}
 
 	/// Removes stale trackers that haven't been updated recently
 	pub fn cleanup_stale(&mut self, max_age_secs: u64) {
-		let cutoff = Utc::now() - Duration::seconds(max_age_secs as i64);
+		let cutoff = Utc::now() - Duration::seconds(i64::try_from(max_age_secs).unwrap_or(i64::MAX));
 		self.trackers.retain(|_, tracker| tracker.last_update > cutoff);
 	}
 

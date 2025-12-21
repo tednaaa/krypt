@@ -3,13 +3,18 @@ use crate::exchange::Candle;
 /// Classic pivot point levels
 #[derive(Debug, Clone)]
 pub struct PivotLevels {
+	#[allow(dead_code)]
 	pub pivot: f64,
 	pub resistance1: f64,
 	pub resistance2: f64,
 	pub resistance3: f64,
+	#[allow(dead_code)]
 	pub support1: f64,
+	#[allow(dead_code)]
 	pub support2: f64,
+	#[allow(dead_code)]
 	pub support3: f64,
+	#[allow(dead_code)]
 	pub calculated_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -24,14 +29,14 @@ impl PivotLevels {
 		let pivot = (high + low + close) / 3.0;
 
 		// Resistance levels
-		let resistance1 = 2.0 * pivot - low;
+		let resistance1 = 2.0f64.mul_add(pivot, -low);
 		let resistance2 = pivot + (high - low);
-		let resistance3 = high + 2.0 * (pivot - low);
+		let resistance3 = 2.0f64.mul_add(pivot - low, high);
 
 		// Support levels
-		let support1 = 2.0 * pivot - high;
+		let support1 = 2.0f64.mul_add(pivot, -high);
 		let support2 = pivot - (high - low);
-		let support3 = low - 2.0 * (high - pivot);
+		let support3 = 2.0f64.mul_add(-(high - pivot), low);
 
 		Self { pivot, resistance1, resistance2, resistance3, support1, support2, support3, calculated_at: candle.timestamp }
 	}
@@ -48,16 +53,17 @@ impl PivotLevels {
 	}
 
 	/// Calculates pivot points from high, low, close values
+	#[allow(dead_code)]
 	pub fn from_hlc(high: f64, low: f64, close: f64) -> Self {
 		let pivot = (high + low + close) / 3.0;
 
-		let resistance1 = 2.0 * pivot - low;
+		let resistance1 = 2.0f64.mul_add(pivot, -low);
 		let resistance2 = pivot + (high - low);
-		let resistance3 = high + 2.0 * (pivot - low);
+		let resistance3 = 2.0f64.mul_add(pivot - low, high);
 
-		let support1 = 2.0 * pivot - high;
+		let support1 = 2.0f64.mul_add(pivot, -high);
 		let support2 = pivot - (high - low);
-		let support3 = low - 2.0 * (high - pivot);
+		let support3 = 2.0f64.mul_add(-(high - pivot), low);
 
 		Self {
 			pivot,
@@ -93,6 +99,7 @@ impl PivotLevels {
 	}
 
 	/// Checks if price is near a support level within a threshold percentage
+	#[allow(dead_code)]
 	pub fn is_near_support(&self, price: f64, threshold_pct: f64) -> Option<SupportLevel> {
 		let levels =
 			[(SupportLevel::S1, self.support1), (SupportLevel::S2, self.support2), (SupportLevel::S3, self.support3)];
@@ -111,12 +118,14 @@ impl PivotLevels {
 	}
 
 	/// Checks if price is near the pivot point
+	#[allow(dead_code)]
 	pub fn is_near_pivot(&self, price: f64, threshold_pct: f64) -> bool {
 		let distance_pct = ((price - self.pivot).abs() / self.pivot) * 100.0;
 		distance_pct <= threshold_pct
 	}
 
 	/// Returns the distance from price to nearest resistance as a percentage
+	#[allow(dead_code)]
 	pub fn distance_to_resistance(&self, price: f64) -> Option<(ResistanceLevel, f64)> {
 		let levels = [
 			(ResistanceLevel::R1, self.resistance1),
@@ -135,6 +144,7 @@ impl PivotLevels {
 	}
 
 	/// Returns the distance from price to nearest support as a percentage
+	#[allow(dead_code)]
 	pub fn distance_to_support(&self, price: f64) -> Option<(SupportLevel, f64)> {
 		let levels =
 			[(SupportLevel::S1, self.support1), (SupportLevel::S2, self.support2), (SupportLevel::S3, self.support3)];
@@ -155,16 +165,19 @@ impl PivotLevels {
 	}
 
 	/// Checks if price has extended into support zone
+	#[allow(dead_code)]
 	pub fn is_extended_to_support(&self, price: f64) -> bool {
 		price <= self.support1
 	}
 
 	/// Returns all resistance levels as a sorted vector
+	#[allow(dead_code)]
 	pub fn resistance_levels(&self) -> Vec<f64> {
 		vec![self.resistance1, self.resistance2, self.resistance3]
 	}
 
 	/// Returns all support levels as a sorted vector
+	#[allow(dead_code)]
 	pub fn support_levels(&self) -> Vec<f64> {
 		vec![self.support1, self.support2, self.support3]
 	}
@@ -180,14 +193,15 @@ pub enum ResistanceLevel {
 impl std::fmt::Display for ResistanceLevel {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ResistanceLevel::R1 => write!(f, "R1"),
-			ResistanceLevel::R2 => write!(f, "R2"),
-			ResistanceLevel::R3 => write!(f, "R3"),
+			Self::R1 => write!(f, "R1"),
+			Self::R2 => write!(f, "R2"),
+			Self::R3 => write!(f, "R3"),
 		}
 	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum SupportLevel {
 	S1,
 	S2,
@@ -197,9 +211,9 @@ pub enum SupportLevel {
 impl std::fmt::Display for SupportLevel {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			SupportLevel::S1 => write!(f, "S1"),
-			SupportLevel::S2 => write!(f, "S2"),
-			SupportLevel::S3 => write!(f, "S3"),
+			Self::S1 => write!(f, "S1"),
+			Self::S2 => write!(f, "S2"),
+			Self::S3 => write!(f, "S3"),
 		}
 	}
 }
@@ -229,19 +243,19 @@ mod tests {
 		let pivots = PivotLevels::from_candle(&candle);
 
 		// P = (50000 + 48000 + 49000) / 3 = 49000
-		assert_eq!(pivots.pivot, 49000.0);
+		assert!((pivots.pivot - 49000.0).abs() < 1e-10);
 
 		// R1 = 2 * P - L = 2 * 49000 - 48000 = 50000
-		assert_eq!(pivots.resistance1, 50000.0);
+		assert!((pivots.resistance1 - 50000.0).abs() < 1e-10);
 
 		// S1 = 2 * P - H = 2 * 49000 - 50000 = 48000
-		assert_eq!(pivots.support1, 48000.0);
+		assert!((pivots.support1 - 48000.0).abs() < 1e-10);
 
 		// R2 = P + (H - L) = 49000 + 2000 = 51000
-		assert_eq!(pivots.resistance2, 51000.0);
+		assert!((pivots.resistance2 - 51000.0).abs() < 1e-10);
 
 		// S2 = P - (H - L) = 49000 - 2000 = 47000
-		assert_eq!(pivots.support2, 47000.0);
+		assert!((pivots.support2 - 47000.0).abs() < 1e-10);
 	}
 
 	#[test]

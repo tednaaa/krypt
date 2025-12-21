@@ -10,7 +10,7 @@ pub struct OverheatingQualifier {
 }
 
 impl OverheatingQualifier {
-	pub fn new(derivatives_config: DerivativesConfig, technical_config: TechnicalConfig) -> Self {
+	pub const fn new(derivatives_config: DerivativesConfig, technical_config: TechnicalConfig) -> Self {
 		Self { derivatives_config, technical_config }
 	}
 
@@ -78,7 +78,7 @@ impl OverheatingQualifier {
 		// Check Open Interest increase
 		if let Some(oi_increase) = tracker.oi_increase_pct() {
 			if oi_increase >= self.derivatives_config.min_oi_increase_pct {
-				conditions_met.push(format!("OI increased {:.1}%", oi_increase));
+				conditions_met.push(format!("OI increased {oi_increase:.1}%"));
 			} else {
 				conditions_failed
 					.push(format!("OI increase {:.1}% < {:.1}%", oi_increase, self.derivatives_config.min_oi_increase_pct));
@@ -90,7 +90,7 @@ impl OverheatingQualifier {
 		// Check Funding Rate
 		if let Some(funding_rate) = tracker.funding_rate() {
 			if funding_rate >= self.derivatives_config.min_funding_rate {
-				conditions_met.push(format!("Funding rate {:.4}", funding_rate));
+				conditions_met.push(format!("Funding rate {funding_rate:.4}"));
 			} else {
 				conditions_failed
 					.push(format!("Funding {:.4} < {:.4}", funding_rate, self.derivatives_config.min_funding_rate));
@@ -104,7 +104,7 @@ impl OverheatingQualifier {
 			if long_ratio >= self.derivatives_config.min_long_ratio {
 				let long_pct = long_ratio * 100.0;
 				let short_pct = (1.0 - long_ratio) * 100.0;
-				conditions_met.push(format!("Long ratio {:.0}% / {:.0}%", long_pct, short_pct));
+				conditions_met.push(format!("Long ratio {long_pct:.0}% / {short_pct:.0}%"));
 			} else {
 				conditions_failed.push(format!("Long ratio {:.2} < {:.2}", long_ratio, self.derivatives_config.min_long_ratio));
 			}
@@ -138,11 +138,11 @@ impl OverheatingQualifier {
 				let mut ema_info = Vec::new();
 				if let Some(ema50) = tracker.ema_1m.get(50) {
 					let ext_pct = ((current_price - ema50) / ema50) * 100.0;
-					ema_info.push(format!("EMA50: +{:.1}%", ext_pct));
+					ema_info.push(format!("EMA50: +{ext_pct:.1}%"));
 				}
 				if let Some(ema200) = tracker.ema_1m.get(200) {
 					let ext_pct = ((current_price - ema200) / ema200) * 100.0;
-					ema_info.push(format!("EMA200: +{:.1}%", ext_pct));
+					ema_info.push(format!("EMA200: +{ext_pct:.1}%"));
 				}
 
 				if !ema_info.is_empty() {
@@ -156,7 +156,7 @@ impl OverheatingQualifier {
 		// Check pivot proximity (if enabled)
 		if self.technical_config.pivot_proximity {
 			if let Some(pivot_context) = tracker.is_near_pivot_resistance(current_price, 2.0) {
-				conditions_met.push(format!("Near {}", pivot_context));
+				conditions_met.push(format!("Near {pivot_context}"));
 			} else {
 				conditions_failed.push("Not near pivot resistance".to_string());
 			}
@@ -166,7 +166,7 @@ impl OverheatingQualifier {
 		let momentum_status = self.check_momentum(tracker);
 		match &momentum_status {
 			MomentumStatus::Slowing(reason) => {
-				conditions_met.push(format!("Momentum slowing: {}", reason));
+				conditions_met.push(format!("Momentum slowing: {reason}"));
 			},
 			MomentumStatus::Strong => {
 				conditions_failed.push("Momentum still strong".to_string());
@@ -223,9 +223,12 @@ impl OverheatingQualifier {
 
 #[derive(Debug, Clone)]
 pub struct QualificationResult {
+	#[allow(dead_code)]
 	pub qualified: bool,
 	pub score: u32,
+	#[allow(dead_code)]
 	pub conditions_met: Vec<String>,
+	#[allow(dead_code)]
 	pub conditions_failed: Vec<String>,
 	pub derivatives_details: DerivativesResult,
 	pub technical_details: TechnicalResult,
@@ -244,13 +247,16 @@ pub struct DerivativesResult {
 pub struct TechnicalResult {
 	pub conditions_met: Vec<String>,
 	pub conditions_failed: Vec<String>,
+	#[allow(dead_code)]
 	pub ema_extended: bool,
+	#[allow(dead_code)]
 	pub near_pivot_resistance: Option<String>,
 	pub momentum_status: MomentumStatus,
 }
 
 #[derive(Debug, Clone)]
 pub enum MomentumStatus {
+	#[allow(dead_code)]
 	Strong,
 	Slowing(String),
 	Unknown,
@@ -258,6 +264,7 @@ pub enum MomentumStatus {
 
 impl QualificationResult {
 	/// Returns a formatted summary of the qualification
+	#[allow(dead_code)]
 	pub fn summary(&self) -> String {
 		format!(
 			"Qualified with score {}/5. Met: [{}]. Failed: [{}]",
@@ -268,21 +275,22 @@ impl QualificationResult {
 	}
 
 	/// Returns derivatives context for alert message
+	#[allow(dead_code)]
 	pub fn derivatives_context(&self) -> String {
 		let mut parts = Vec::new();
 
 		if let Some(oi) = self.derivatives_details.oi_increase_pct {
-			parts.push(format!("OI: +{:.1}%", oi));
+			parts.push(format!("OI: +{oi:.1}%"));
 		}
 
 		if let Some(funding) = self.derivatives_details.funding_rate {
-			parts.push(format!("Funding: {:.4}", funding));
+			parts.push(format!("Funding: {funding:.4}"));
 		}
 
 		if let Some(ratio) = self.derivatives_details.long_ratio {
 			let long_pct = ratio * 100.0;
 			let short_pct = (1.0 - ratio) * 100.0;
-			parts.push(format!("L/S: {:.0}% / {:.0}%", long_pct, short_pct));
+			parts.push(format!("L/S: {long_pct:.0}% / {short_pct:.0}%"));
 		}
 
 		if parts.is_empty() {
@@ -297,12 +305,12 @@ impl QualificationResult {
 		let mut context = Vec::new();
 
 		for condition in &self.technical_details.conditions_met {
-			context.push(format!("• {}", condition));
+			context.push(format!("• {condition}"));
 		}
 
 		// Add momentum status if slowing
 		if let MomentumStatus::Slowing(reason) = &self.technical_details.momentum_status {
-			context.push(format!("• Momentum slowing: {}", reason));
+			context.push(format!("• Momentum slowing: {reason}"));
 		}
 
 		context

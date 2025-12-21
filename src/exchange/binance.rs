@@ -9,6 +9,10 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
+// Binance has a limit of ~200 streams per connection, and URL length limits
+// Split into chunks of 50 streams to be safe
+const MAX_STREAMS_PER_CONNECTION: usize = 50;
+
 pub struct BinanceExchange {
 	config: BinanceConfig,
 	client: Client,
@@ -72,13 +76,10 @@ impl Exchange for BinanceExchange {
 		for symbol in symbols {
 			for interval in intervals {
 				let symbol_lower = symbol.exchange_symbol().to_lowercase();
-				streams.push(format!("{}@kline_{}", symbol_lower, interval));
+				streams.push(format!("{symbol_lower}@kline_{interval}"));
 			}
 		}
 
-		// Binance has a limit of ~200 streams per connection, and URL length limits
-		// Split into chunks of 50 streams to be safe
-		const MAX_STREAMS_PER_CONNECTION: usize = 50;
 		let chunks: Vec<_> = streams.chunks(MAX_STREAMS_PER_CONNECTION).collect();
 
 		tracing::info!(
@@ -120,7 +121,7 @@ impl Exchange for BinanceExchange {
 										// Extract symbol from stream name (e.g., "btcusdt@kline_1m")
 										if let Some(symbol_part) = stream_name.split('@').next() {
 											if data.get("e").and_then(|e| e.as_str()) == Some("kline") {
-												if let Some(candle) = BinanceExchange::parse_kline_message(symbol_part, data) {
+												if let Some(candle) = Self::parse_kline_message(symbol_part, data) {
 													return Some(ExchangeMessage::Candle(candle));
 												}
 											}
@@ -131,18 +132,17 @@ impl Exchange for BinanceExchange {
 							},
 							Err(e) => {
 								tracing::warn!("Failed to parse Binance message: {}", e);
-								Some(ExchangeMessage::Error(format!("Parse error: {}", e)))
+								Some(ExchangeMessage::Error(format!("Parse error: {e}")))
 							},
 						}
 					},
-					Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => None,
 					Ok(Message::Close(_)) => {
 						tracing::info!("Binance WebSocket closed");
 						Some(ExchangeMessage::Error("Connection closed".to_string()))
 					},
 					Err(e) => {
 						tracing::error!("Binance WebSocket error: {}", e);
-						Some(ExchangeMessage::Error(format!("WebSocket error: {}", e)))
+						Some(ExchangeMessage::Error(format!("WebSocket error: {e}")))
 					},
 					_ => None,
 				}
@@ -153,7 +153,7 @@ impl Exchange for BinanceExchange {
 
 		// Merge all connection streams into one
 		if connection_streams.len() == 1 {
-			Ok(connection_streams.into_iter().next().unwrap())
+			connection_streams.into_iter().next().ok_or_else(|| anyhow::anyhow!("No streams created"))
 		} else {
 			let merged_stream = futures_util::stream::select_all(connection_streams);
 			Ok(Box::pin(merged_stream))
@@ -242,6 +242,7 @@ struct ExchangeInfo {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SymbolInfo {
+	#[allow(dead_code)]
 	symbol: String,
 	status: String,
 	base_asset: String,
@@ -253,27 +254,35 @@ struct SymbolInfo {
 #[serde(rename_all = "camelCase")]
 struct OpenInterestResponse {
 	open_interest: String,
+	#[allow(dead_code)]
 	symbol: String,
+	#[allow(dead_code)]
 	time: i64,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PremiumIndexResponse {
+	#[allow(dead_code)]
 	symbol: String,
 	mark_price: String,
+	#[allow(dead_code)]
 	index_price: String,
 	last_funding_rate: String,
+	#[allow(dead_code)]
 	next_funding_time: i64,
+	#[allow(dead_code)]
 	time: i64,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LongShortRatioResponse {
+	#[allow(dead_code)]
 	symbol: String,
 	long_account: f64,
 	short_account: f64,
+	#[allow(dead_code)]
 	timestamp: i64,
 }
 

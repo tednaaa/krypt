@@ -31,6 +31,7 @@ pub trait Exchange: Send + Sync {
 	async fn fetch_historical_candles(&self, symbol: &Symbol, interval: &str, limit: u32) -> Result<Vec<Candle>>;
 
 	/// Checks if exchange supports the given symbol
+	#[allow(dead_code)]
 	fn supports_symbol(&self, symbol: &Symbol) -> bool {
 		symbol.exchange == self.name()
 	}
@@ -41,6 +42,6 @@ pub fn create_exchange(name: &str, config: &crate::config::Config) -> Result<Box
 	match name.to_lowercase().as_str() {
 		"binance" => Ok(Box::new(binance::BinanceExchange::new(config.binance.clone())?)),
 		"bybit" => Ok(Box::new(bybit::BybitExchange::new(config.bybit.clone())?)),
-		_ => anyhow::bail!("Unsupported exchange: {}", name),
+		_ => anyhow::bail!("Unsupported exchange: {name}"),
 	}
 }
