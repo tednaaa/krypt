@@ -172,7 +172,6 @@ mod tests {
 			chat_id: "123456".to_string(),
 			pump_screener_topic_id: None,
 			alert_cooldown_secs: 300,
-			max_alerts_per_minute: 10,
 		};
 
 		let bot = TelegramBot::new(config);

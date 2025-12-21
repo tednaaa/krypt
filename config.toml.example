@@ -1,76 +1,31 @@
-# Pump Scanner → Short Bias Alert Bot Configuration
-
 [binance]
-ws_url = "wss://stream.binance.com:9443/ws"
+ws_url = "wss://stream.binance.com:9443"
 api_url = "https://fapi.binance.com"
 
 [bybit]
 ws_url = "wss://stream.bybit.com/v5/public/linear"
 api_url = "https://api.bybit.com"
 
-[filters]
-min_quote_volume = 10_000_000.0  # 10M USDT
-min_price = 0.0001
-min_trades_24h = 5000
-stale_data_threshold_secs = 10
-
-[scoring]
-tier1_threshold = 0.7
-tier2_threshold = 0.4
-max_tier1_symbols = 20
-rescore_interval_secs = 10
-
-[scoring.weights]
-volume_weight = 0.4
-volatility_weight = 0.4
-activity_weight = 0.2
-
-[detection]
-pump_threshold_pct = 3.0
-dump_threshold_pct = -3.0
-accumulation_range_pct = 0.4
-volume_spike_ratio = 2.0
-breakout_threshold_pct = 0.5
-window_size_secs = 60
-accumulation_window_secs = 120
-distribution_window_secs = 180
-
-# Pump Detection Configuration
 [pump]
-price_threshold_pct = 5.0        # Minimum % price increase to trigger pump detection (default: 4-6%)
-min_window_mins = 5              # Minimum time window in minutes
-max_window_mins = 15             # Maximum time window in minutes
-volume_multiplier = 2.5          # Volume must be X times average (default: 2-3x)
+price_threshold_pct = 5.0
+min_window_mins = 5
+max_window_mins = 15
+volume_multiplier = 1.5
 
-# Derivatives Overheating Thresholds
 [derivatives]
-min_funding_rate = 0.025         # Minimum funding rate to consider overheating (2.5%)
-min_long_ratio = 0.65            # Minimum long/short ratio (65% longs)
-min_oi_increase_pct = 10.0       # Minimum Open Interest increase percentage
-poll_interval_secs = 45          # How often to poll derivatives data (30-60s recommended)
+min_funding_rate = 0.025
+min_long_ratio = 0.65
+min_oi_increase_pct = 10.0
+poll_interval_secs = 45
 
-# Technical Analysis Configuration
 [technical]
-ema_extension = true             # Enable EMA extension checks
-pivot_proximity = true           # Enable pivot resistance proximity checks
-pivot_timeframe_mins = 60        # Timeframe for pivot calculation (1H or 4H)
-emas = [7, 14, 28, 50, 200]      # EMA periods to calculate
+ema_extension = true
+pivot_proximity = true
+pivot_timeframe_mins = 60
+emas = [7, 14, 28, 50, 200]
 
 [telegram]
 bot_token = "YOUR_BOT_TOKEN_HERE"
 chat_id = "YOUR_CHAT_ID_HERE"
-alert_cooldown_secs = 300        # Cooldown between alerts for same symbol (5 minutes)
-max_alerts_per_minute = 10
-
-[performance]
-ticker_channel_size = 1000
-trade_channel_size = 1000
-alert_channel_size = 100
-price_window_size = 60
-cvd_history_size = 300
-
-[websocket]
-ping_interval_secs = 180
-reconnect_base_delay_secs = 1
-reconnect_max_delay_secs = 30
-target_latency_ms = 500
+pump_screener_topic_id = "YOUR_OPTIONAL_TOPIC_ID_HERE"
+alert_cooldown_secs = 300  # 5 minutes

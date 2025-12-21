@@ -6,18 +6,10 @@ use std::fs;
 pub struct Config {
 	pub binance: BinanceConfig,
 	pub bybit: BybitConfig,
-	pub filters: FilterConfig,
-	pub scoring: ScoringConfig,
-	#[allow(dead_code)]
-	pub detection: DetectionConfig,
 	pub pump: PumpConfig,
 	pub derivatives: DerivativesConfig,
 	pub technical: TechnicalConfig,
 	pub telegram: TelegramConfig,
-	#[allow(dead_code)]
-	pub performance: PerformanceConfig,
-	#[allow(dead_code)]
-	pub websocket: WebSocketConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -30,50 +22,6 @@ pub struct BinanceConfig {
 pub struct BybitConfig {
 	pub ws_url: String,
 	pub api_url: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct FilterConfig {
-	pub min_quote_volume: f64,
-	#[allow(dead_code)]
-	pub min_price: f64,
-	#[allow(dead_code)]
-	pub min_trades_24h: u64,
-	#[allow(dead_code)]
-	pub stale_data_threshold_secs: u64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct ScoringConfig {
-	pub tier1_threshold: f64,
-	pub tier2_threshold: f64,
-	pub max_tier1_symbols: usize,
-	#[allow(dead_code)]
-	pub rescore_interval_secs: u64,
-	#[allow(dead_code)]
-	pub weights: ScoringWeights,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-#[allow(clippy::struct_field_names)]
-pub struct ScoringWeights {
-	pub volume_weight: f64,
-	pub volatility_weight: f64,
-	pub activity_weight: f64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-pub struct DetectionConfig {
-	pub pump_threshold_pct: f64,
-	pub dump_threshold_pct: f64,
-	pub accumulation_range_pct: f64,
-	pub volume_spike_ratio: f64,
-	pub breakout_threshold_pct: f64,
-	pub window_size_secs: u64,
-	pub accumulation_window_secs: u64,
-	pub distribution_window_secs: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -106,28 +54,6 @@ pub struct TelegramConfig {
 	pub chat_id: String,
 	pub pump_screener_topic_id: Option<String>,
 	pub alert_cooldown_secs: u64,
-	#[allow(dead_code)]
-	pub max_alerts_per_minute: usize,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-#[allow(clippy::struct_field_names)]
-pub struct PerformanceConfig {
-	pub ticker_channel_size: usize,
-	pub trade_channel_size: usize,
-	pub alert_channel_size: usize,
-	pub price_window_size: usize,
-	pub cvd_history_size: usize,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-pub struct WebSocketConfig {
-	pub ping_interval_secs: u64,
-	pub reconnect_base_delay_secs: u64,
-	pub reconnect_max_delay_secs: u64,
-	pub target_latency_ms: u64,
 }
 
 impl Config {
@@ -148,18 +74,6 @@ impl Config {
 
 		if self.telegram.chat_id == "YOUR_CHAT_ID_HERE" {
 			anyhow::bail!("Please set a valid Telegram chat ID in config.toml");
-		}
-
-		if self.filters.min_quote_volume <= 0.0 {
-			anyhow::bail!("min_quote_volume must be positive");
-		}
-
-		if self.scoring.tier1_threshold <= self.scoring.tier2_threshold {
-			anyhow::bail!("tier1_threshold must be greater than tier2_threshold");
-		}
-
-		if self.scoring.max_tier1_symbols == 0 {
-			anyhow::bail!("max_tier1_symbols must be greater than 0");
 		}
 
 		if self.pump.price_threshold_pct <= 0.0 {
