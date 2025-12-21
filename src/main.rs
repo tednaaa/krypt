@@ -15,6 +15,8 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 use tracing::{debug, error, info, warn};
 
+use crate::exchange::Symbol;
+
 #[tokio::main]
 async fn main() -> Result<()> {
 	// Initialize tracing
@@ -81,9 +83,44 @@ async fn main() -> Result<()> {
 		return Err(anyhow::anyhow!("No symbols available"));
 	}
 
-	// Filter to top symbols (limit to prevent overwhelming)
-	let tracked_symbols = all_symbols.into_iter().take(50).collect::<Vec<_>>();
-	info!("Tracking {} symbols across exchanges", tracked_symbols.len());
+	// Filter out invalid symbols (non-ASCII characters, special symbols)
+	let initial_count = all_symbols.len();
+	all_symbols.retain(Symbol::is_valid);
+	if initial_count != all_symbols.len() {
+		warn!("Filtered out {} invalid symbols (non-ASCII or special characters)", initial_count - all_symbols.len());
+	}
+
+	// Apply max_symbols limit (default to 400 to avoid WebSocket connection limits)
+	// Binance supports ~20 WebSocket connections, each with 50 streams = ~500 symbols max
+	// We use 400 as a safe default (16 connections for 2 intervals per symbol)
+	let max_symbols = config.monitoring.max_symbols.unwrap_or(400);
+	let tracked_symbols = if all_symbols.len() > max_symbols {
+		info!("Limiting symbols from {} to {} (max_symbols limit)", all_symbols.len(), max_symbols);
+
+		// Try to get balanced distribution between exchanges
+		let mut binance_symbols: Vec<_> = all_symbols.iter().filter(|s| s.exchange == "binance").cloned().collect();
+		let mut bybit_symbols: Vec<_> = all_symbols.iter().filter(|s| s.exchange == "bybit").cloned().collect();
+
+		let binance_count = (max_symbols / 2).min(binance_symbols.len());
+		let bybit_count = (max_symbols - binance_count).min(bybit_symbols.len());
+		let final_binance_count = binance_count + (max_symbols - binance_count - bybit_count);
+
+		binance_symbols.truncate(final_binance_count);
+		bybit_symbols.truncate(bybit_count);
+
+		let mut result = binance_symbols;
+		result.extend(bybit_symbols);
+		result
+	} else {
+		all_symbols
+	};
+
+	info!(
+		"Tracking {} symbols across exchanges ({} Binance, {} Bybit)",
+		tracked_symbols.len(),
+		tracked_symbols.iter().filter(|s| s.exchange == "binance").count(),
+		tracked_symbols.iter().filter(|s| s.exchange == "bybit").count()
+	);
 
 	// Spawn background tasks
 	let telegram_arc = Arc::new(telegram);
@@ -281,10 +318,30 @@ async fn run_derivatives_polling_task(
 	// Create exchange instances for REST API calls
 	let exchanges = [create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
 
-	info!("Starting derivatives polling (interval: {}s)", poll_interval_secs);
+	// Calculate safe delay between requests to avoid rate limits
+	// Binance: ~1200 req/min, Bybit: ~120 req/min
+	// Use conservative 10 req/sec = 600 req/min per exchange
+	let delay_per_request_ms = if symbols.len() > 100 {
+		200 // 5 req/sec for many symbols
+	} else if symbols.len() > 50 {
+		150 // ~6.6 req/sec
+	} else {
+		100 // 10 req/sec for few symbols
+	};
+
+	info!(
+		"Starting derivatives polling (interval: {}s, {} symbols, {}ms delay)",
+		poll_interval_secs,
+		symbols.len(),
+		delay_per_request_ms
+	);
 
 	loop {
 		poll_interval.tick().await;
+
+		let start_time = std::time::Instant::now();
+		let mut success_count = 0;
+		let mut error_count = 0;
 
 		for symbol in &symbols {
 			// Find the correct exchange for this symbol
@@ -296,6 +353,7 @@ async fn run_derivatives_polling_task(
 						let mut manager = tracker_manager.write().await;
 						if let Some(tracker) = manager.get_mut(symbol) {
 							tracker.update_derivatives(metrics);
+							success_count += 1;
 							debug!(
 								symbol = %symbol,
 								"Updated derivatives metrics"
@@ -303,6 +361,7 @@ async fn run_derivatives_polling_task(
 						}
 					},
 					Err(e) => {
+						error_count += 1;
 						debug!(
 							symbol = %symbol,
 							error = %e,
@@ -312,9 +371,17 @@ async fn run_derivatives_polling_task(
 				}
 			}
 
-			// Small delay to avoid rate limiting
-			tokio::time::sleep(Duration::from_millis(100)).await;
+			// Rate limiting delay
+			tokio::time::sleep(Duration::from_millis(delay_per_request_ms)).await;
 		}
+
+		let elapsed = start_time.elapsed();
+		info!(
+			"Derivatives poll completed: {} success, {} errors, took {:.1}s",
+			success_count,
+			error_count,
+			elapsed.as_secs_f64()
+		);
 	}
 }
 
@@ -330,10 +397,28 @@ async fn run_pivot_update_task(
 	// Create exchange instances for REST API calls
 	let exchanges = [create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
 
-	info!("Starting pivot update task (interval: {}m)", pivot_interval_mins);
+	// Calculate safe delay between requests to avoid rate limits
+	let delay_per_request_ms = if symbols.len() > 100 {
+		200 // 5 req/sec for many symbols
+	} else if symbols.len() > 50 {
+		150 // ~6.6 req/sec
+	} else {
+		100 // 10 req/sec for few symbols
+	};
+
+	info!(
+		"Starting pivot update task (interval: {}m, {} symbols, {}ms delay)",
+		pivot_interval_mins,
+		symbols.len(),
+		delay_per_request_ms
+	);
 
 	loop {
 		update_interval.tick().await;
+
+		let start_time = std::time::Instant::now();
+		let mut success_count = 0;
+		let mut error_count = 0;
 
 		for symbol in &symbols {
 			// Find the correct exchange for this symbol
@@ -347,6 +432,7 @@ async fn run_pivot_update_task(
 						let mut manager = tracker_manager.write().await;
 						if let Some(tracker) = manager.get_mut(symbol) {
 							tracker.update_pivot_levels(&candles);
+							success_count += 1;
 							debug!(
 								symbol = %symbol,
 								"Updated pivot levels"
@@ -354,6 +440,7 @@ async fn run_pivot_update_task(
 						}
 					},
 					Err(e) => {
+						error_count += 1;
 						debug!(
 							symbol = %symbol,
 							error = %e,
@@ -363,8 +450,16 @@ async fn run_pivot_update_task(
 				}
 			}
 
-			// Small delay to avoid rate limiting
-			tokio::time::sleep(Duration::from_millis(100)).await;
+			// Rate limiting delay
+			tokio::time::sleep(Duration::from_millis(delay_per_request_ms)).await;
 		}
+
+		let elapsed = start_time.elapsed();
+		info!(
+			"Pivot poll completed: {} success, {} errors, took {:.1}s",
+			success_count,
+			error_count,
+			elapsed.as_secs_f64()
+		);
 	}
 }

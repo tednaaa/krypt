@@ -21,6 +21,14 @@ impl Symbol {
 	pub fn exchange_symbol(&self) -> String {
 		format!("{}{}", self.base, self.quote)
 	}
+
+	/// Check if symbol is valid (ASCII only, no special characters)
+	pub fn is_valid(&self) -> bool {
+		self.base.chars().all(|c| c.is_ascii_alphanumeric())
+			&& self.quote.chars().all(|c| c.is_ascii_alphanumeric())
+			&& !self.base.is_empty()
+			&& !self.quote.is_empty()
+	}
 }
 
 impl std::fmt::Display for Symbol {
