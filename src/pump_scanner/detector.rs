@@ -53,7 +53,7 @@ impl PumpDetector {
 					return Some(PumpCandidate {
 						symbol: tracker.symbol.clone(),
 						price_change,
-						volume_ratio: self.calculate_volume_ratio(tracker),
+						volume_ratio: self.calculate_volume_ratio(tracker, window_secs),
 						current_price,
 					});
 				}
@@ -88,29 +88,42 @@ impl PumpDetector {
 			return false;
 		}
 
-		// Check volume spike
-		let volume_ratio = self.calculate_volume_ratio(tracker);
-		if volume_ratio < self.config.volume_multiplier {
-			debug!(
-				symbol = %tracker.symbol,
-				volume_ratio = volume_ratio,
-				threshold = self.config.volume_multiplier,
-				"Volume spike insufficient"
-			);
-			return false;
+		// Check volume spike (optional - pumps can happen without volume spike, especially for shitcoins)
+		let volume_ratio = self.calculate_volume_ratio(tracker, price_change.time_elapsed_mins * 60);
+
+		// If volume multiplier is set to 0 or very low, skip volume check
+		if self.config.volume_multiplier > 0.5 {
+			if volume_ratio < self.config.volume_multiplier {
+				// For shitcoins and low liquidity, allow pumps with lower volume if price change is significant
+				let is_significant_pump = price_change.change_pct >= self.config.price_threshold_pct * 1.5;
+				let has_some_volume = volume_ratio >= 1.0;
+
+				if !(is_significant_pump && has_some_volume) {
+					debug!(
+						symbol = %tracker.symbol,
+						volume_ratio = volume_ratio,
+						threshold = self.config.volume_multiplier,
+						price_change = price_change.change_pct,
+						"Volume spike insufficient and not a significant pump"
+					);
+					return false;
+				} else {
+					debug!(
+						symbol = %tracker.symbol,
+						volume_ratio = volume_ratio,
+						price_change = price_change.change_pct,
+						"Allowing pump with lower volume due to significant price change"
+					);
+				}
+			}
 		}
 
 		true
 	}
 
-	/// Calculates volume ratio (current vs average)
-	fn calculate_volume_ratio(&self, tracker: &SymbolTracker) -> f64 {
-		let avg_volume = tracker.average_volume();
-		if avg_volume > 0.0 {
-			tracker.current_volume() / avg_volume
-		} else {
-			0.0
-		}
+	/// Calculates volume ratio (current window vs baseline average)
+	fn calculate_volume_ratio(&self, tracker: &SymbolTracker, window_secs: u64) -> f64 {
+		tracker.volume_ratio_for_window(window_secs)
 	}
 
 	/// Updates pump candidate state if still active

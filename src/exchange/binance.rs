@@ -23,28 +23,21 @@ impl BinanceExchange {
 	}
 
 	fn parse_kline_message(symbol_str: &str, data: &Value) -> Option<Candle> {
-		let k = data.get("k")?;
-
-		let timestamp = k.get("t")?.as_i64()?;
-		let open = k.get("o")?.as_str()?.parse::<f64>().ok()?;
-		let high = k.get("h")?.as_str()?.parse::<f64>().ok()?;
-		let low = k.get("l")?.as_str()?.parse::<f64>().ok()?;
-		let close = k.get("c")?.as_str()?.parse::<f64>().ok()?;
-		let volume = k.get("v")?.as_str()?.parse::<f64>().ok()?;
-		let interval = k.get("i")?.as_str()?.to_string();
+		let k_value = data.get("k")?;
+		let k: BinanceKlineData = serde_json::from_value(k_value.clone()).ok()?;
 
 		// Parse symbol (e.g., "BTCUSDT" -> "BTC", "USDT")
 		let (base, quote) = parse_binance_symbol(symbol_str)?;
 
 		Some(Candle {
 			symbol: Symbol::new(base, quote, "binance"),
-			timestamp: DateTime::from_timestamp_millis(timestamp)?,
-			open,
-			high,
-			low,
-			close,
-			volume,
-			interval,
+			timestamp: DateTime::from_timestamp_millis(k.t)?,
+			open: k.o.parse().ok()?,
+			high: k.h.parse().ok()?,
+			low: k.l.parse().ok()?,
+			close: k.c.parse().ok()?,
+			volume: k.v.parse().ok()?,
+			interval: k.i,
 		})
 	}
 }
@@ -286,3 +279,29 @@ struct LongShortRatioResponse {
 
 // Kline response: [timestamp, open, high, low, close, volume, close_time, ...]
 type KlineResponse = (i64, String, String, String, String, String, i64, String, i64, String, String, String);
+
+// Binance WebSocket Kline Data
+#[derive(Debug, Deserialize)]
+struct BinanceKlineData {
+	/// Kline start time
+	#[serde(rename = "t")]
+	pub t: i64,
+	/// Open price
+	#[serde(rename = "o")]
+	pub o: String,
+	/// High price
+	#[serde(rename = "h")]
+	pub h: String,
+	/// Low price
+	#[serde(rename = "l")]
+	pub l: String,
+	/// Close price
+	#[serde(rename = "c")]
+	pub c: String,
+	/// Volume
+	#[serde(rename = "v")]
+	pub v: String,
+	/// Interval
+	#[serde(rename = "i")]
+	pub i: String,
+}

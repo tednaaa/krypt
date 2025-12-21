@@ -131,11 +131,60 @@ impl SymbolTracker {
 		sum / self.volume_history.len() as f64
 	}
 
+	/// Calculates baseline average volume excluding recent window (to avoid including pump volume in baseline)
+	pub fn baseline_average_volume(&self, exclude_last_mins: u64) -> f64 {
+		if self.volume_history.is_empty() {
+			return 0.0;
+		}
+
+		// Only use volume data that's older than the exclusion window
+		// This prevents recent pump volume from inflating the baseline
+		let exclude_count = exclude_last_mins.min(self.volume_history.len() as u64) as usize;
+
+		if exclude_count >= self.volume_history.len() {
+			// If we'd exclude everything, use full history
+			return self.average_volume();
+		}
+
+		let baseline_volumes: Vec<f64> =
+			self.volume_history.iter().take(self.volume_history.len() - exclude_count).copied().collect();
+
+		if baseline_volumes.is_empty() {
+			return self.average_volume();
+		}
+
+		let sum: f64 = baseline_volumes.iter().sum();
+		sum / baseline_volumes.len() as f64
+	}
+
 	/// Gets current volume from recent candles
 	pub fn current_volume(&self) -> f64 {
 		// Sum volume from last 5 minutes
 		let cutoff = self.last_update - Duration::seconds(300);
 		self.price_history.iter().filter(|p| p.timestamp >= cutoff).map(|p| p.volume).sum()
+	}
+
+	/// Gets volume within a specific time window (in seconds)
+	pub fn volume_in_window(&self, window_secs: u64) -> f64 {
+		let cutoff = self.last_update - Duration::seconds(window_secs as i64);
+		self.price_history.iter().filter(|p| p.timestamp >= cutoff).map(|p| p.volume).sum()
+	}
+
+	/// Calculates volume ratio for a specific window compared to baseline
+	pub fn volume_ratio_for_window(&self, window_secs: u64) -> f64 {
+		let window_volume = self.volume_in_window(window_secs);
+		let window_mins = window_secs / 60;
+
+		// Get baseline average volume per minute
+		let baseline_avg_per_min = self.baseline_average_volume(window_mins);
+
+		if baseline_avg_per_min > 0.0 {
+			// Compare window volume to expected baseline volume for same period
+			let expected_baseline = baseline_avg_per_min * window_mins as f64;
+			window_volume / expected_baseline
+		} else {
+			0.0
+		}
 	}
 
 	/// Calculates OI increase percentage from baseline

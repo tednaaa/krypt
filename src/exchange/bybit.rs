@@ -34,14 +34,9 @@ impl BybitExchange {
 		let interval = parts[1];
 		let symbol_str = parts[2];
 
-		let kline_data = data.get("data")?.as_array()?.first()?;
-
-		let timestamp = kline_data.get("start")?.as_i64()?;
-		let open = kline_data.get("open")?.as_str()?.parse::<f64>().ok()?;
-		let high = kline_data.get("high")?.as_str()?.parse::<f64>().ok()?;
-		let low = kline_data.get("low")?.as_str()?.parse::<f64>().ok()?;
-		let close = kline_data.get("close")?.as_str()?.parse::<f64>().ok()?;
-		let volume = kline_data.get("volume")?.as_str()?.parse::<f64>().ok()?;
+		let kline_array = data.get("data")?.as_array()?;
+		let kline_value = kline_array.first()?;
+		let kline: BybitKlineData = serde_json::from_value(kline_value.clone()).ok()?;
 
 		let (base, quote) = parse_bybit_symbol(symbol_str)?;
 
@@ -56,12 +51,12 @@ impl BybitExchange {
 
 		Some(Candle {
 			symbol: Symbol::new(base, quote, "bybit"),
-			timestamp: DateTime::from_timestamp_millis(timestamp)?,
-			open,
-			high,
-			low,
-			close,
-			volume,
+			timestamp: DateTime::from_timestamp_millis(kline.start)?,
+			open: kline.open.parse().ok()?,
+			high: kline.high.parse().ok()?,
+			low: kline.low.parse().ok()?,
+			close: kline.close.parse().ok()?,
+			volume: kline.volume.parse().ok()?,
 			interval: interval_str.to_string(),
 		})
 	}
@@ -377,3 +372,20 @@ struct KlineResult {
 
 // Kline data: [timestamp, open, high, low, close, volume, turnover]
 type KlineData = (String, String, String, String, String, String, String);
+
+// Bybit WebSocket Kline Data
+#[derive(Debug, Deserialize)]
+struct BybitKlineData {
+	/// Kline start timestamp
+	pub start: i64,
+	/// Open price
+	pub open: String,
+	/// High price
+	pub high: String,
+	/// Low price
+	pub low: String,
+	/// Close price
+	pub close: String,
+	/// Volume
+	pub volume: String,
+}
