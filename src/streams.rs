@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use tokio::time::{interval, sleep, Duration};
+use tokio_tungstenite::tungstenite::Bytes;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
@@ -56,7 +57,7 @@ impl BinanceStreamManager {
 			let mut interval = interval(Duration::from_secs(ping_interval));
 			loop {
 				interval.tick().await;
-				if write.send(Message::Ping(vec![])).await.is_err() {
+				if write.send(Message::Ping(Bytes::new())).await.is_err() {
 					break;
 				}
 				debug!("Sent ping to ticker stream");
@@ -143,7 +144,7 @@ impl BinanceStreamManager {
 			let mut interval = interval(Duration::from_secs(ping_interval));
 			loop {
 				interval.tick().await;
-				if write.send(Message::Ping(vec![])).await.is_err() {
+				if write.send(Message::Ping(Bytes::new())).await.is_err() {
 					break;
 				}
 			}
