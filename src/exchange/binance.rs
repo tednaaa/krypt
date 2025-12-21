@@ -83,65 +83,88 @@ impl Exchange for BinanceExchange {
 			}
 		}
 
-		let stream_param = streams.join("/");
-		let ws_url = format!("{}/stream?streams={}", self.config.ws_url, stream_param);
+		// Binance has a limit of ~200 streams per connection, and URL length limits
+		// Split into chunks of 50 streams to be safe
+		const MAX_STREAMS_PER_CONNECTION: usize = 50;
+		let chunks: Vec<_> = streams.chunks(MAX_STREAMS_PER_CONNECTION).collect();
 
-		tracing::info!("Connecting to Binance WebSocket with {} streams for {} symbols", streams.len(), symbols.len());
-		tracing::debug!("WebSocket URL length: {} chars", ws_url.len());
+		tracing::info!(
+			"Connecting to Binance WebSocket with {} streams for {} symbols across {} connection(s)",
+			streams.len(),
+			symbols.len(),
+			chunks.len()
+		);
 
-		let (ws_stream, response) = connect_async(&ws_url).await.map_err(|e| {
-			tracing::error!("Failed to connect to Binance WebSocket: {}", e);
-			tracing::error!("URL: {}", ws_url);
-			tracing::error!("Possible causes: network issues, firewall blocking, or too many streams");
-			anyhow::anyhow!(
-				"Failed to connect to Binance WebSocket: {}. Check network connectivity and firewall settings.",
-				e
-			)
-		})?;
+		// Create multiple WebSocket connections if needed
+		let mut connection_streams: Vec<MessageStream> = Vec::new();
 
-		tracing::info!("Binance WebSocket connected successfully. Response status: {:?}", response.status());
+		for (i, chunk) in chunks.iter().enumerate() {
+			let stream_param = chunk.join("/");
+			let ws_url = format!("{}/stream?streams={}", self.config.ws_url, stream_param);
 
-		let (_write, read) = ws_stream.split();
+			tracing::debug!("Connection {} URL length: {} chars", i + 1, ws_url.len());
 
-		let message_stream = read.filter_map(|msg| async move {
-			match msg {
-				Ok(Message::Text(text)) => {
-					match serde_json::from_str::<Value>(&text) {
-						Ok(json) => {
-							if let Some(data) = json.get("data") {
-								if let Some(stream_name) = json.get("stream").and_then(|s| s.as_str()) {
-									// Extract symbol from stream name (e.g., "btcusdt@kline_1m")
-									if let Some(symbol_part) = stream_name.split('@').next() {
-										if data.get("e").and_then(|e| e.as_str()) == Some("kline") {
-											if let Some(candle) = BinanceExchange::parse_kline_message(symbol_part, data) {
-												return Some(ExchangeMessage::Candle(candle));
+			let (ws_stream, response) = connect_async(&ws_url).await.map_err(|e| {
+				tracing::error!("Failed to connect to Binance WebSocket (connection {}): {}", i + 1, e);
+				tracing::error!("URL: {}", ws_url);
+				tracing::error!("Possible causes: network issues, firewall blocking, or invalid stream names");
+				anyhow::anyhow!(
+					"Failed to connect to Binance WebSocket: {e}. Check network connectivity and firewall settings.",
+				)
+			})?;
+
+			tracing::info!("Binance WebSocket connection {} established. Response status: {:?}", i + 1, response.status());
+
+			let (_write, read) = ws_stream.split();
+
+			let message_stream = read.filter_map(|msg| async move {
+				match msg {
+					Ok(Message::Text(text)) => {
+						match serde_json::from_str::<Value>(&text) {
+							Ok(json) => {
+								if let Some(data) = json.get("data") {
+									if let Some(stream_name) = json.get("stream").and_then(|s| s.as_str()) {
+										// Extract symbol from stream name (e.g., "btcusdt@kline_1m")
+										if let Some(symbol_part) = stream_name.split('@').next() {
+											if data.get("e").and_then(|e| e.as_str()) == Some("kline") {
+												if let Some(candle) = BinanceExchange::parse_kline_message(symbol_part, data) {
+													return Some(ExchangeMessage::Candle(candle));
+												}
 											}
 										}
 									}
 								}
-							}
-							None
-						},
-						Err(e) => {
-							tracing::warn!("Failed to parse Binance message: {}", e);
-							Some(ExchangeMessage::Error(format!("Parse error: {}", e)))
-						},
-					}
-				},
-				Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => None,
-				Ok(Message::Close(_)) => {
-					tracing::info!("Binance WebSocket closed");
-					Some(ExchangeMessage::Error("Connection closed".to_string()))
-				},
-				Err(e) => {
-					tracing::error!("Binance WebSocket error: {}", e);
-					Some(ExchangeMessage::Error(format!("WebSocket error: {}", e)))
-				},
-				_ => None,
-			}
-		});
+								None
+							},
+							Err(e) => {
+								tracing::warn!("Failed to parse Binance message: {}", e);
+								Some(ExchangeMessage::Error(format!("Parse error: {}", e)))
+							},
+						}
+					},
+					Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => None,
+					Ok(Message::Close(_)) => {
+						tracing::info!("Binance WebSocket closed");
+						Some(ExchangeMessage::Error("Connection closed".to_string()))
+					},
+					Err(e) => {
+						tracing::error!("Binance WebSocket error: {}", e);
+						Some(ExchangeMessage::Error(format!("WebSocket error: {}", e)))
+					},
+					_ => None,
+				}
+			});
 
-		Ok(Box::pin(message_stream))
+			connection_streams.push(Box::pin(message_stream));
+		}
+
+		// Merge all connection streams into one
+		if connection_streams.len() == 1 {
+			Ok(connection_streams.into_iter().next().unwrap())
+		} else {
+			let merged_stream = futures_util::stream::select_all(connection_streams);
+			Ok(Box::pin(merged_stream))
+		}
 	}
 
 	async fn fetch_derivatives_metrics(&self, symbol: &Symbol) -> Result<DerivativesMetrics> {
