@@ -419,6 +419,8 @@ async fn run_pivot_update_task(
 		let start_time = std::time::Instant::now();
 		let mut success_count = 0;
 		let mut error_count = 0;
+		let mut error_samples: Vec<(String, String)> = Vec::new();
+		let max_error_samples = 5;
 
 		for symbol in &symbols {
 			// Find the correct exchange for this symbol
@@ -441,6 +443,12 @@ async fn run_pivot_update_task(
 					},
 					Err(e) => {
 						error_count += 1;
+
+						// Collect sample errors for logging
+						if error_samples.len() < max_error_samples {
+							error_samples.push((symbol.to_string(), e.to_string()));
+						}
+
 						debug!(
 							symbol = %symbol,
 							error = %e,
@@ -455,11 +463,29 @@ async fn run_pivot_update_task(
 		}
 
 		let elapsed = start_time.elapsed();
-		info!(
-			"Pivot poll completed: {} success, {} errors, took {:.1}s",
-			success_count,
-			error_count,
-			elapsed.as_secs_f64()
-		);
+
+		if error_count > 0 {
+			warn!(
+				"Pivot poll completed: {} success, {} errors, took {:.1}s",
+				success_count,
+				error_count,
+				elapsed.as_secs_f64()
+			);
+
+			// Log sample errors to help diagnose issues
+			if !error_samples.is_empty() {
+				warn!("Sample pivot poll errors:");
+				for (symbol, error) in error_samples.iter().take(3) {
+					warn!("  {} → {}", symbol, error);
+				}
+			}
+		} else {
+			info!(
+				"Pivot poll completed: {} success, {} errors, took {:.1}s",
+				success_count,
+				error_count,
+				elapsed.as_secs_f64()
+			);
+		}
 	}
 }
