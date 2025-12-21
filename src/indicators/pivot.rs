@@ -80,8 +80,11 @@ impl PivotLevels {
 		];
 
 		for (level, level_price) in levels {
-			let distance_pct = ((price - level_price).abs() / level_price) * 100.0;
-			if distance_pct <= threshold_pct && price >= level_price * 0.99 {
+			// Only consider prices that are approaching resistance from below
+			// Price must be within threshold_pct of the resistance level
+			// and must be at or above (level_price - threshold_pct)
+			let distance_pct = ((level_price - price) / level_price) * 100.0;
+			if distance_pct >= 0.0 && distance_pct < threshold_pct {
 				return Some(level);
 			}
 		}
@@ -95,8 +98,11 @@ impl PivotLevels {
 			[(SupportLevel::S1, self.support1), (SupportLevel::S2, self.support2), (SupportLevel::S3, self.support3)];
 
 		for (level, level_price) in levels {
-			let distance_pct = ((price - level_price).abs() / level_price) * 100.0;
-			if distance_pct <= threshold_pct && price <= level_price * 1.01 {
+			// Only consider prices that are approaching support from above
+			// Price must be within threshold_pct of the support level
+			// and must be at or below (level_price + threshold_pct)
+			let distance_pct = ((price - level_price) / level_price) * 100.0;
+			if distance_pct >= 0.0 && distance_pct < threshold_pct {
 				return Some(level);
 			}
 		}

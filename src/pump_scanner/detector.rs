@@ -196,7 +196,7 @@ mod tests {
 		// Add pump movement: 5% increase in 10 minutes with 3x volume
 		let pump_start = Utc::now() - Duration::minutes(10);
 		for i in 0..10 {
-			let price = 50000.0 + (i as f64 * 250.0); // 5% increase over 10 candles
+			let price = 50000.0 + (i as f64 * 278.0); // 5% increase over 10 candles (2500/9 ≈ 278)
 			let volume = 3000.0; // 3x volume
 			let candle = create_test_candle(symbol.clone(), price, volume, pump_start + Duration::minutes(i));
 			tracker.update_from_candle(&candle);

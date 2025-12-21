@@ -37,8 +37,8 @@ impl SymbolTracker {
 	pub fn new(symbol: Symbol, ema_periods: &[u32]) -> Self {
 		Self {
 			symbol,
-			price_history: VecDeque::with_capacity(300), // ~5 minutes at 1 update/sec
-			volume_history: VecDeque::with_capacity(60), // 1 hour of 1m candles
+			price_history: VecDeque::with_capacity(1200), // ~20 minutes at 1 update/sec
+			volume_history: VecDeque::with_capacity(60),  // 1 hour of 1m candles
 			ema_1m: MultiEMA::new(ema_periods),
 			ema_5m: MultiEMA::new(ema_periods),
 			pivot_levels: None,
@@ -57,8 +57,8 @@ impl SymbolTracker {
 		self.price_history.push_back(price_point);
 		self.last_update = candle.timestamp;
 
-		// Keep last 5 minutes of price data
-		let cutoff = candle.timestamp - Duration::seconds(300);
+		// Keep last 20 minutes of price data (to support 15 min detection window + buffer)
+		let cutoff = candle.timestamp - Duration::seconds(1200);
 		while self.price_history.front().map_or(false, |p| p.timestamp < cutoff) {
 			self.price_history.pop_front();
 		}
