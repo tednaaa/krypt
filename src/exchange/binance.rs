@@ -86,7 +86,20 @@ impl Exchange for BinanceExchange {
 		let stream_param = streams.join("/");
 		let ws_url = format!("{}/stream?streams={}", self.config.ws_url, stream_param);
 
-		let (ws_stream, _) = connect_async(&ws_url).await.context("Failed to connect to Binance WebSocket")?;
+		tracing::info!("Connecting to Binance WebSocket with {} streams for {} symbols", streams.len(), symbols.len());
+		tracing::debug!("WebSocket URL length: {} chars", ws_url.len());
+
+		let (ws_stream, response) = connect_async(&ws_url).await.map_err(|e| {
+			tracing::error!("Failed to connect to Binance WebSocket: {}", e);
+			tracing::error!("URL: {}", ws_url);
+			tracing::error!("Possible causes: network issues, firewall blocking, or too many streams");
+			anyhow::anyhow!(
+				"Failed to connect to Binance WebSocket: {}. Check network connectivity and firewall settings.",
+				e
+			)
+		})?;
+
+		tracing::info!("Binance WebSocket connected successfully. Response status: {:?}", response.status());
 
 		let (_write, read) = ws_stream.split();
 

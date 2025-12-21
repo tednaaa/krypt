@@ -93,6 +93,7 @@ pub struct TechnicalConfig {
 pub struct TelegramConfig {
 	pub bot_token: String,
 	pub chat_id: String,
+	pub pump_screener_topic_id: Option<String>,
 	pub alert_cooldown_secs: u64,
 	pub max_alerts_per_minute: usize,
 }

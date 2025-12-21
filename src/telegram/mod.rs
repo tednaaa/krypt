@@ -1,7 +1,10 @@
 use crate::config::TelegramConfig;
 use crate::pump_scanner::{PumpCandidate, QualificationResult};
 use anyhow::{Context, Result};
-use teloxide::{prelude::*, types::ParseMode};
+use teloxide::{
+	prelude::*,
+	types::{MessageId, ParseMode, ThreadId},
+};
 use tracing::{error, info};
 
 /// Telegram bot for posting pump alerts to a channel
@@ -23,7 +26,18 @@ impl TelegramBot {
 
 		let chat_id = self.config.chat_id.parse::<i64>().context("Invalid chat_id format")?;
 
-		match self.bot.send_message(ChatId(chat_id), message).parse_mode(ParseMode::Html).await {
+		let mut request = self.bot.send_message(ChatId(chat_id), message).parse_mode(ParseMode::Html);
+
+		// Add topic ID if configured
+		if let Some(ref topic_id) = self.config.pump_screener_topic_id {
+			if !topic_id.is_empty() {
+				if let Ok(thread_id) = topic_id.parse::<i32>() {
+					request = request.message_thread_id(ThreadId(MessageId(thread_id)));
+				}
+			}
+		}
+
+		match request.await {
 			Ok(_) => {
 				info!(
 					symbol = %candidate.symbol,
@@ -114,11 +128,18 @@ impl TelegramBot {
 	pub async fn test_connection(&self) -> Result<()> {
 		let chat_id = self.config.chat_id.parse::<i64>().context("Invalid chat_id format")?;
 
-		self
-			.bot
-			.send_message(ChatId(chat_id), "🤖 Pump Scanner Bot initialized")
-			.await
-			.context("Failed to send test message")?;
+		let mut request = self.bot.send_message(ChatId(chat_id), "🤖 Pump Scanner Bot initialized");
+
+		// Add topic ID if configured
+		if let Some(ref topic_id) = self.config.pump_screener_topic_id {
+			if !topic_id.is_empty() {
+				if let Ok(thread_id) = topic_id.parse::<i32>() {
+					request = request.message_thread_id(ThreadId(MessageId(thread_id)));
+				}
+			}
+		}
+
+		request.await.context("Failed to send test message")?;
 
 		info!("Telegram bot connection verified");
 		Ok(())
@@ -161,6 +182,7 @@ mod tests {
 		let config = TelegramConfig {
 			bot_token: "test_token".to_string(),
 			chat_id: "123456".to_string(),
+			pump_screener_topic_id: None,
 			alert_cooldown_secs: 300,
 			max_alerts_per_minute: 10,
 		};
