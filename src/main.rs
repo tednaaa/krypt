@@ -6,9 +6,10 @@ mod telegram;
 
 use anyhow::{Context, Result};
 use config::Config;
-use exchange::{create_exchange, Candle, Exchange, ExchangeMessage};
+use exchange::{create_exchange, Exchange, ExchangeMessage, Ticker};
 use futures_util::StreamExt;
 use pump_scanner::{OverheatingQualifier, PumpDetector, TrackerManager};
+use std::collections::HashSet;
 use std::sync::Arc;
 use telegram::TelegramBot;
 use tokio::sync::RwLock;
@@ -90,30 +91,7 @@ async fn main() -> Result<()> {
 		warn!("Filtered out {} invalid symbols (non-ASCII or special characters)", initial_count - all_symbols.len());
 	}
 
-	// Apply max_symbols limit (default to 400 to avoid WebSocket connection limits)
-	// Binance supports ~20 WebSocket connections, each with 50 streams = ~500 symbols max
-	// We use 400 as a safe default (16 connections for 2 intervals per symbol)
-	let max_symbols = config.monitoring.max_symbols.unwrap_or(400);
-	let tracked_symbols = if all_symbols.len() > max_symbols {
-		info!("Limiting symbols from {} to {} (max_symbols limit)", all_symbols.len(), max_symbols);
-
-		// Try to get balanced distribution between exchanges
-		let mut binance_symbols: Vec<_> = all_symbols.iter().filter(|s| s.exchange == "binance").cloned().collect();
-		let mut bybit_symbols: Vec<_> = all_symbols.iter().filter(|s| s.exchange == "bybit").cloned().collect();
-
-		let binance_count = (max_symbols / 2).min(binance_symbols.len());
-		let bybit_count = (max_symbols - binance_count).min(bybit_symbols.len());
-		let final_binance_count = binance_count + (max_symbols - binance_count - bybit_count);
-
-		binance_symbols.truncate(final_binance_count);
-		bybit_symbols.truncate(bybit_count);
-
-		let mut result = binance_symbols;
-		result.extend(bybit_symbols);
-		result
-	} else {
-		all_symbols
-	};
+	let tracked_symbols = all_symbols;
 
 	info!(
 		"Tracking {} symbols across exchanges ({} Binance, {} Bybit)",
@@ -125,35 +103,35 @@ async fn main() -> Result<()> {
 	// Spawn background tasks
 	let telegram_arc = Arc::new(telegram);
 
-	// Task 1: Stream candles and detect pumps
-	let candle_task = {
+	// Task 1: Stream prices and detect pumps, fetch detailed metrics on-demand
+	let price_stream_task = {
 		let tracker_manager = Arc::clone(&tracker_manager);
 		let pump_detector = Arc::clone(&pump_detector);
 		let qualifier = Arc::clone(&qualifier);
 		let telegram = Arc::clone(&telegram_arc);
 		let symbols = tracked_symbols.clone();
 		let cooldown_secs = config.telegram.alert_cooldown_secs;
+		let price_threshold_pct = config.pump.price_threshold_pct;
+		let price_window_mins = config.pump.max_window_mins;
+		let config_clone = config.clone();
 
 		tokio::spawn(async move {
-			if let Err(e) =
-				run_candle_stream_task(binance, symbols, tracker_manager, pump_detector, qualifier, telegram, cooldown_secs)
-					.await
+			if let Err(e) = run_price_stream_task(
+				binance,
+				bybit,
+				symbols,
+				tracker_manager,
+				pump_detector,
+				qualifier,
+				telegram,
+				cooldown_secs,
+				price_threshold_pct,
+				price_window_mins,
+				config_clone,
+			)
+			.await
 			{
-				error!("Candle stream task failed: {}", e);
-			}
-		})
-	};
-
-	// Task 2: Periodically fetch derivatives metrics
-	let derivatives_task = {
-		let tracker_manager = Arc::clone(&tracker_manager);
-		let tracked_symbols = tracked_symbols.clone();
-		let poll_interval_secs = config.derivatives.poll_interval_secs;
-		let config = config.clone();
-
-		tokio::spawn(async move {
-			if let Err(e) = run_derivatives_polling_task(tracked_symbols, tracker_manager, poll_interval_secs, config).await {
-				error!("Derivatives polling task failed: {}", e);
+				error!("Price stream task failed: {}", e);
 			}
 		})
 	};
@@ -200,8 +178,7 @@ async fn main() -> Result<()> {
 
 	// Wait for all tasks
 	tokio::select! {
-		_ = candle_task => warn!("Candle stream task ended"),
-		_ = derivatives_task => warn!("Derivatives task ended"),
+		_ = price_stream_task => warn!("Price stream task ended"),
 		_ = pivot_task => warn!("Pivot task ended"),
 		_ = cleanup_task => warn!("Cleanup task ended"),
 	}
@@ -209,179 +186,282 @@ async fn main() -> Result<()> {
 	Ok(())
 }
 
-/// Runs the candle streaming and pump detection task
-async fn run_candle_stream_task(
-	exchange: Box<dyn Exchange>,
+/// Runs the price streaming and pump detection task
+/// Only fetches detailed metrics (OI, volume, etc.) when price pump threshold is hit
+async fn run_price_stream_task(
+	_binance: Box<dyn Exchange>,
+	_bybit: Box<dyn Exchange>,
 	symbols: Vec<exchange::Symbol>,
 	tracker_manager: Arc<RwLock<TrackerManager>>,
 	pump_detector: Arc<PumpDetector>,
 	qualifier: Arc<OverheatingQualifier>,
 	telegram: Arc<TelegramBot>,
 	cooldown_secs: u64,
+	price_threshold_pct: f64,
+	price_window_mins: u64,
+	config: Config,
 ) -> Result<()> {
-	let intervals = vec!["1m", "5m"];
+	info!("Starting price stream for {} symbols", symbols.len());
+	info!("Will fetch detailed metrics when price change >= {}% in {} minutes (using pump config)", price_threshold_pct, price_window_mins);
 
-	info!("Starting candle stream for {} symbols", symbols.len());
+	// Split symbols by exchange
+	let binance_symbols: Vec<_> = symbols.iter().filter(|s| s.exchange == "binance").cloned().collect();
+	let bybit_symbols: Vec<_> = symbols.iter().filter(|s| s.exchange == "bybit").cloned().collect();
 
-	let mut stream = exchange.stream_candles(&symbols, &intervals).await?;
+	// Track symbols that have triggered detailed metrics fetch (to avoid duplicate fetches)
+	let fetched_symbols: Arc<RwLock<HashSet<Symbol>>> = Arc::new(RwLock::new(HashSet::new()));
 
-	while let Some(message) = stream.next().await {
-		match message {
-			ExchangeMessage::Candle(candle) => {
-				process_candle(candle, &tracker_manager, &pump_detector, &qualifier, &telegram, cooldown_secs).await;
-			},
-			ExchangeMessage::Error(err) => {
-				warn!("Exchange stream error: {}", err);
-			},
-			_ => {},
-		}
+	// Spawn tasks for each exchange's price stream
+	let mut tasks = Vec::new();
+
+	if !binance_symbols.is_empty() {
+		let tracker_manager_clone = Arc::clone(&tracker_manager);
+		let pump_detector_clone = Arc::clone(&pump_detector);
+		let qualifier_clone = Arc::clone(&qualifier);
+		let telegram_clone = Arc::clone(&telegram);
+		let fetched_symbols_clone = Arc::clone(&fetched_symbols);
+		let config_clone = config.clone();
+		let binance_symbols_clone = binance_symbols.clone();
+
+		let binance_task = tokio::spawn(async move {
+			let binance_ws = match create_exchange("binance", &config_clone) {
+				Ok(e) => e,
+				Err(e) => {
+					error!("Failed to create Binance WebSocket client: {}", e);
+					return;
+				},
+			};
+
+			let binance_rest = match create_exchange("binance", &config_clone) {
+				Ok(e) => e,
+				Err(e) => {
+					error!("Failed to create Binance REST client: {}", e);
+					return;
+				},
+			};
+
+			let mut stream = match binance_ws.stream_prices(&binance_symbols_clone).await {
+				Ok(s) => s,
+				Err(e) => {
+					error!("Failed to create Binance price stream: {}", e);
+					return;
+				},
+			};
+
+			while let Some(message) = stream.next().await {
+				match message {
+					ExchangeMessage::Ticker(ticker) => {
+						process_price_update(
+							ticker,
+							&tracker_manager_clone,
+							&pump_detector_clone,
+							&qualifier_clone,
+							&telegram_clone,
+							cooldown_secs,
+							price_threshold_pct,
+							price_window_mins,
+							&binance_rest,
+							&fetched_symbols_clone,
+						)
+						.await;
+					},
+					ExchangeMessage::Error(err) => {
+						warn!("Binance price stream error: {}", err);
+					},
+					_ => {},
+				}
+			}
+		});
+		tasks.push(binance_task);
 	}
 
-	warn!("Candle stream ended");
+	if !bybit_symbols.is_empty() {
+		let tracker_manager_clone = Arc::clone(&tracker_manager);
+		let pump_detector_clone = Arc::clone(&pump_detector);
+		let qualifier_clone = Arc::clone(&qualifier);
+		let telegram_clone = Arc::clone(&telegram);
+		let fetched_symbols_clone = Arc::clone(&fetched_symbols);
+		let config_clone = config.clone();
+		let bybit_symbols_clone = bybit_symbols.clone();
+
+		let bybit_task = tokio::spawn(async move {
+			let bybit_ws = match create_exchange("bybit", &config_clone) {
+				Ok(e) => e,
+				Err(e) => {
+					error!("Failed to create Bybit WebSocket client: {}", e);
+					return;
+				},
+			};
+
+			let bybit_rest = match create_exchange("bybit", &config_clone) {
+				Ok(e) => e,
+				Err(e) => {
+					error!("Failed to create Bybit REST client: {}", e);
+					return;
+				},
+			};
+
+			let mut stream = match bybit_ws.stream_prices(&bybit_symbols_clone).await {
+				Ok(s) => s,
+				Err(e) => {
+					error!("Failed to create Bybit price stream: {}", e);
+					return;
+				},
+			};
+
+			while let Some(message) = stream.next().await {
+				match message {
+					ExchangeMessage::Ticker(ticker) => {
+						process_price_update(
+							ticker,
+							&tracker_manager_clone,
+							&pump_detector_clone,
+							&qualifier_clone,
+							&telegram_clone,
+							cooldown_secs,
+							price_threshold_pct,
+							price_window_mins,
+							&bybit_rest,
+							&fetched_symbols_clone,
+						)
+						.await;
+					},
+					ExchangeMessage::Error(err) => {
+						warn!("Bybit price stream error: {}", err);
+					},
+					_ => {},
+				}
+			}
+		});
+		tasks.push(bybit_task);
+	}
+
+	// Wait for all tasks
+	futures_util::future::join_all(tasks).await;
+
+	warn!("Price stream ended");
 	Ok(())
 }
 
-/// Processes a candle update and checks for pump signals
-async fn process_candle(
-	candle: Candle,
+/// Processes a price update and checks for pump signals
+/// Fetches detailed metrics via REST API when price threshold is hit
+async fn process_price_update(
+	ticker: Ticker,
 	tracker_manager: &Arc<RwLock<TrackerManager>>,
 	pump_detector: &Arc<PumpDetector>,
 	qualifier: &Arc<OverheatingQualifier>,
 	telegram: &Arc<TelegramBot>,
 	cooldown_secs: u64,
+	price_threshold_pct: f64,
+	price_window_mins: u64,
+	exchange: &Box<dyn Exchange>,
+	fetched_symbols: &Arc<RwLock<HashSet<Symbol>>>,
 ) {
 	let mut manager = tracker_manager.write().await;
-	let tracker = manager.get_or_create(candle.symbol.clone());
+	let tracker = manager.get_or_create(ticker.symbol.clone());
 
-	// Update tracker with new candle
-	tracker.update_from_candle(&candle);
+	// Update tracker with new price
+	tracker.update_from_price(ticker.last_price, ticker.timestamp);
 
-	// Skip if in cooldown
-	if tracker.is_in_cooldown(cooldown_secs) {
-		drop(manager);
-		return;
-	}
+	// Check if price change exceeds threshold
+	let price_window_secs = price_window_mins * 60;
+	let should_check_pump = if let Some(price_change) = tracker.price_change_in_window(price_window_secs) {
+		if price_change.change_pct >= price_threshold_pct {
+			// Check if we've already fetched detailed metrics for this symbol
+			let fetched = fetched_symbols.read().await;
+			let needs_fetch = !fetched.contains(&ticker.symbol);
+			drop(fetched);
+			drop(manager);
 
-	// Detect pump candidate
-	if let Some(candidate) = pump_detector.analyze(tracker) {
-		debug!(
-			symbol = %candidate.symbol,
-			change = %candidate.price_change.change_pct,
-			"Pump candidate detected, checking qualification..."
-		);
-
-		// Qualify the pump
-		if let Some(qualification) = qualifier.qualify(&candidate, tracker) {
-			info!(
-				symbol = %candidate.symbol,
-				score = qualification.score,
-				"Pump qualified! Sending alert..."
-			);
-
-			// Send Telegram alert
-			if let Err(e) = telegram.post_alert(&candidate, &qualification).await {
-				error!(
-					symbol = %candidate.symbol,
-					error = %e,
-					"Failed to send Telegram alert"
-				);
-			} else {
-				// Mark as alerted
-				tracker.mark_alerted();
+			if needs_fetch {
+				// Fetch detailed metrics via REST API
 				info!(
-					symbol = %candidate.symbol,
-					"Alert sent successfully"
+					symbol = %ticker.symbol,
+					change_pct = price_change.change_pct,
+					"Price pump detected, fetching detailed metrics..."
 				);
-			}
-		} else {
-			debug!(
-				symbol = %candidate.symbol,
-				"Pump not qualified - insufficient overheating conditions"
-			);
-		}
-	}
 
-	// Update pump candidate state
-	pump_detector.update_candidate(tracker);
-	drop(manager);
-}
-
-/// Runs the derivatives metrics polling task
-async fn run_derivatives_polling_task(
-	symbols: Vec<exchange::Symbol>,
-	tracker_manager: Arc<RwLock<TrackerManager>>,
-	poll_interval_secs: u64,
-	config: Config,
-) -> Result<()> {
-	let mut poll_interval = interval(Duration::from_secs(poll_interval_secs));
-
-	// Create exchange instances for REST API calls
-	let exchanges = [create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
-
-	// Calculate safe delay between requests to avoid rate limits
-	// Binance: ~1200 req/min, Bybit: ~120 req/min
-	// Use conservative 10 req/sec = 600 req/min per exchange
-	let delay_per_request_ms = if symbols.len() > 100 {
-		200 // 5 req/sec for many symbols
-	} else if symbols.len() > 50 {
-		150 // ~6.6 req/sec
-	} else {
-		100 // 10 req/sec for few symbols
-	};
-
-	info!(
-		"Starting derivatives polling (interval: {}s, {} symbols, {}ms delay)",
-		poll_interval_secs,
-		symbols.len(),
-		delay_per_request_ms
-	);
-
-	loop {
-		poll_interval.tick().await;
-
-		let start_time = std::time::Instant::now();
-		let mut success_count = 0;
-		let mut error_count = 0;
-
-		for symbol in &symbols {
-			// Find the correct exchange for this symbol
-			let exchange = exchanges.iter().find(|e| e.name() == symbol.exchange.as_str());
-
-			if let Some(exchange) = exchange {
-				match exchange.fetch_derivatives_metrics(symbol).await {
+				match exchange.fetch_derivatives_metrics(&ticker.symbol).await {
 					Ok(metrics) => {
 						let mut manager = tracker_manager.write().await;
-						if let Some(tracker) = manager.get_mut(symbol) {
+						if let Some(tracker) = manager.get_mut(&ticker.symbol) {
 							tracker.update_derivatives(metrics);
-							success_count += 1;
-							debug!(
-								symbol = %symbol,
-								"Updated derivatives metrics"
-							);
 						}
+						drop(manager);
+
+						let mut fetched = fetched_symbols.write().await;
+						fetched.insert(ticker.symbol.clone());
 					},
 					Err(e) => {
-						error_count += 1;
-						debug!(
-							symbol = %symbol,
+						warn!(
+							symbol = %ticker.symbol,
 							error = %e,
-							"Failed to fetch derivatives metrics"
+							"Failed to fetch detailed metrics"
 						);
 					},
 				}
 			}
 
-			// Rate limiting delay
-			tokio::time::sleep(Duration::from_millis(delay_per_request_ms)).await;
+			true
+		} else {
+			false
 		}
+	} else {
+		false
+	};
 
-		let elapsed = start_time.elapsed();
-		info!(
-			"Derivatives poll completed: {} success, {} errors, took {:.1}s",
-			success_count,
-			error_count,
-			elapsed.as_secs_f64()
-		);
+	// Check for pump and send alerts if threshold was hit
+	if should_check_pump {
+		let mut manager = tracker_manager.write().await;
+		if let Some(tracker) = manager.get_mut(&ticker.symbol) {
+			// Skip if in cooldown
+			if tracker.is_in_cooldown(cooldown_secs) {
+				drop(manager);
+				return;
+			}
+
+			// Detect pump candidate
+			if let Some(candidate) = pump_detector.analyze(tracker) {
+				debug!(
+					symbol = %candidate.symbol,
+					change = %candidate.price_change.change_pct,
+					"Pump candidate detected, checking qualification..."
+				);
+
+				// Qualify the pump
+				if let Some(qualification) = qualifier.qualify(&candidate, tracker) {
+					info!(
+						symbol = %candidate.symbol,
+						score = qualification.score,
+						"Pump qualified! Sending alert..."
+					);
+
+					// Send Telegram alert
+					if let Err(e) = telegram.post_alert(&candidate, &qualification).await {
+						error!(
+							symbol = %candidate.symbol,
+							error = %e,
+							"Failed to send Telegram alert"
+						);
+					} else {
+						// Mark as alerted
+						tracker.mark_alerted();
+						info!(
+							symbol = %candidate.symbol,
+							"Alert sent successfully"
+						);
+					}
+				} else {
+					debug!(
+						symbol = %candidate.symbol,
+						"Pump not qualified - insufficient overheating conditions"
+					);
+				}
+			}
+
+			// Update pump candidate state
+			pump_detector.update_candidate(tracker);
+		}
 	}
 }
 

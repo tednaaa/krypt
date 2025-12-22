@@ -10,7 +10,6 @@ pub struct Config {
 	pub derivatives: DerivativesConfig,
 	pub technical: TechnicalConfig,
 	pub telegram: TelegramConfig,
-	pub monitoring: MonitoringConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -57,12 +56,6 @@ pub struct TelegramConfig {
 	pub alert_cooldown_secs: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct MonitoringConfig {
-	#[serde(default)]
-	pub max_symbols: Option<usize>,
-}
-
 impl Config {
 	pub fn load(path: &str) -> Result<Self> {
 		let content = fs::read_to_string(path).with_context(|| format!("Failed to read config file: {path}"))?;
@@ -101,12 +94,6 @@ impl Config {
 
 		if self.technical.emas.is_empty() {
 			anyhow::bail!("technical.emas must contain at least one period");
-		}
-
-		if let Some(max) = self.monitoring.max_symbols {
-			if max == 0 {
-				anyhow::bail!("monitoring.max_symbols must be greater than 0 if set");
-			}
 		}
 
 		Ok(())

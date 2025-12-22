@@ -77,6 +77,20 @@ impl SymbolTracker {
 		}
 	}
 
+	/// Updates price history with a new price ticker update
+	pub fn update_from_price(&mut self, price: f64, timestamp: DateTime<Utc>) {
+		let price_point = PricePoint { timestamp, price, volume: 0.0 }; // Volume not available from ticker
+
+		self.price_history.push_back(price_point);
+		self.last_update = timestamp;
+
+		// Keep last 20 minutes of price data (to support 15 min detection window + buffer)
+		let cutoff = timestamp - Duration::seconds(1200);
+		while self.price_history.front().is_some_and(|p| p.timestamp < cutoff) {
+			self.price_history.pop_front();
+		}
+	}
+
 	/// Updates pivot levels from historical candles
 	pub fn update_pivot_levels(&mut self, candles: &[Candle]) {
 		if let Some(pivots) = PivotLevels::from_candles(candles) {

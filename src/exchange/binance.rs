@@ -1,4 +1,4 @@
-use super::{Candle, DerivativesMetrics, Exchange, ExchangeMessage, LongShortRatio, MessageStream, Symbol};
+use super::{Candle, DerivativesMetrics, Exchange, ExchangeMessage, LongShortRatio, MessageStream, Symbol, Ticker};
 use crate::config::BinanceConfig;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -64,6 +64,101 @@ impl Exchange for BinanceExchange {
 				.map(|s| Symbol::new(s.base_asset, s.quote_asset, "binance"))
 				.collect(),
 		)
+	}
+
+	async fn stream_prices(&self, symbols: &[Symbol]) -> Result<MessageStream> {
+		if symbols.is_empty() {
+			return Ok(Box::pin(stream::empty()));
+		}
+
+		// Build stream names: btcusdt@ticker
+		let mut streams = Vec::new();
+		for symbol in symbols {
+			let symbol_lower = symbol.exchange_symbol().to_lowercase();
+			streams.push(format!("{symbol_lower}@ticker"));
+		}
+
+		let chunks: Vec<_> = streams.chunks(MAX_STREAMS_PER_CONNECTION).collect();
+
+		tracing::info!(
+			"Connecting to Binance price stream with {} streams for {} symbols across {} connection(s)",
+			streams.len(),
+			symbols.len(),
+			chunks.len()
+		);
+
+		// Create multiple WebSocket connections if needed
+		let mut connection_streams: Vec<MessageStream> = Vec::new();
+
+		for (i, chunk) in chunks.iter().enumerate() {
+			let stream_param = chunk.join("/");
+			let ws_url = format!("{}/stream?streams={}", self.config.ws_url, stream_param);
+
+			tracing::debug!("Price stream connection {} URL length: {} chars", i + 1, ws_url.len());
+
+			let (ws_stream, response) = connect_async(&ws_url).await.map_err(|e| {
+				tracing::error!("Failed to connect to Binance price WebSocket (connection {}): {}", i + 1, e);
+				anyhow::anyhow!("Failed to connect to Binance price WebSocket: {e}")
+			})?;
+
+			tracing::info!("Binance price WebSocket connection {} established. Response status: {:?}", i + 1, response.status());
+
+			let (_write, read) = ws_stream.split();
+
+			let message_stream = read.filter_map(|msg| async move {
+				match msg {
+					Ok(Message::Text(text)) => {
+						match serde_json::from_str::<Value>(&text) {
+							Ok(json) => {
+								if let Some(data) = json.get("data") {
+									if let Some(stream_name) = json.get("stream").and_then(|s| s.as_str()) {
+										// Extract symbol from stream name (e.g., "btcusdt@ticker")
+										if let Some(symbol_part) = stream_name.split('@').next() {
+											if let Some((base, quote)) = parse_binance_symbol(symbol_part) {
+												if let Some(price) = data.get("c").and_then(|c| c.as_str()).and_then(|c| c.parse::<f64>().ok()) {
+													let ticker = Ticker {
+														symbol: Symbol::new(base, quote, "binance"),
+														timestamp: Utc::now(),
+														last_price: price,
+														volume_24h: data.get("v").and_then(|v| v.as_str()).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0),
+														price_change_24h_pct: data.get("P").and_then(|p| p.as_str()).and_then(|p| p.parse::<f64>().ok()).unwrap_or(0.0),
+													};
+													return Some(ExchangeMessage::Ticker(ticker));
+												}
+											}
+										}
+									}
+								}
+								None
+							},
+							Err(e) => {
+								tracing::warn!("Failed to parse Binance price message: {}", e);
+								Some(ExchangeMessage::Error(format!("Parse error: {e}")))
+							},
+						}
+					},
+					Ok(Message::Close(_)) => {
+						tracing::info!("Binance price WebSocket closed");
+						Some(ExchangeMessage::Error("Connection closed".to_string()))
+					},
+					Err(e) => {
+						tracing::error!("Binance price WebSocket error: {}", e);
+						Some(ExchangeMessage::Error(format!("WebSocket error: {e}")))
+					},
+					_ => None,
+				}
+			});
+
+			connection_streams.push(Box::pin(message_stream));
+		}
+
+		// Merge all connection streams into one
+		if connection_streams.len() == 1 {
+			connection_streams.into_iter().next().ok_or_else(|| anyhow::anyhow!("No streams created"))
+		} else {
+			let merged_stream = futures_util::stream::select_all(connection_streams);
+			Ok(Box::pin(merged_stream))
+		}
 	}
 
 	async fn stream_candles(&self, symbols: &[Symbol], intervals: &[&str]) -> Result<MessageStream> {

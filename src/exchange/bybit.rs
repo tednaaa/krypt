@@ -1,4 +1,4 @@
-use super::{Candle, DerivativesMetrics, Exchange, ExchangeMessage, LongShortRatio, MessageStream, Symbol};
+use super::{Candle, DerivativesMetrics, Exchange, ExchangeMessage, LongShortRatio, MessageStream, Symbol, Ticker};
 use crate::config::BybitConfig;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -85,6 +85,103 @@ impl Exchange for BybitExchange {
 				.map(|s| Symbol::new(s.base_coin, s.quote_coin, "bybit"))
 				.collect(),
 		)
+	}
+
+	async fn stream_prices(&self, symbols: &[Symbol]) -> Result<MessageStream> {
+		if symbols.is_empty() {
+			return Ok(Box::pin(stream::empty()));
+		}
+
+		let (ws_stream, _) = connect_async(&self.config.ws_url).await.context("Failed to connect to Bybit WebSocket")?;
+
+		let (mut write, read) = ws_stream.split();
+
+		// Subscribe to ticker topics
+		let mut topics = Vec::new();
+		for symbol in symbols {
+			let symbol_str = symbol.exchange_symbol();
+			topics.push(format!("tickers.{symbol_str}"));
+		}
+
+		// Send subscription message
+		let subscribe_msg = serde_json::json!({
+			"op": "subscribe",
+			"args": topics
+		});
+
+		write
+			.send(Message::Text(subscribe_msg.to_string().into()))
+			.await
+			.context("Failed to send Bybit subscription message")?;
+
+		let message_stream = read.filter_map(|msg| async move {
+			match msg {
+				Ok(Message::Text(text)) => {
+					match serde_json::from_str::<Value>(&text) {
+						Ok(json) => {
+							// Check if it's a subscription confirmation
+							if json.get("op").and_then(|o| o.as_str()) == Some("subscribe") {
+								tracing::info!("Bybit price subscription confirmed");
+								return None;
+							}
+
+							// Check if it's a ticker update
+							if let Some(topic) = json.get("topic").and_then(|t| t.as_str()) {
+								if topic.starts_with("tickers.") {
+									if let Some(data) = json.get("data") {
+										if let Some(data_array) = data.as_array() {
+											if let Some(ticker_data) = data_array.first() {
+												if let Some(symbol_str) = topic.strip_prefix("tickers.") {
+													if let Some((base, quote)) = parse_bybit_symbol(symbol_str) {
+														if let Some(last_price_str) = ticker_data.get("lastPrice").and_then(|p| p.as_str()) {
+															if let Ok(price) = last_price_str.parse::<f64>() {
+																let ticker = Ticker {
+																	symbol: Symbol::new(base, quote, "bybit"),
+																	timestamp: Utc::now(),
+																	last_price: price,
+																	volume_24h: ticker_data
+																		.get("volume24h")
+																		.and_then(|v| v.as_str())
+																		.and_then(|v| v.parse::<f64>().ok())
+																		.unwrap_or(0.0),
+																	price_change_24h_pct: ticker_data
+																		.get("price24hPcnt")
+																		.and_then(|p| p.as_str())
+																		.and_then(|p| p.parse::<f64>().ok())
+																		.map(|p| p * 100.0)
+																		.unwrap_or(0.0),
+																};
+																return Some(ExchangeMessage::Ticker(ticker));
+															}
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+							None
+						},
+						Err(e) => {
+							tracing::warn!("Failed to parse Bybit price message: {}", e);
+							Some(ExchangeMessage::Error(format!("Parse error: {e}")))
+						},
+					}
+				},
+				Ok(Message::Close(_)) => {
+					tracing::info!("Bybit price WebSocket closed");
+					Some(ExchangeMessage::Error("Connection closed".to_string()))
+				},
+				Err(e) => {
+					tracing::error!("Bybit price WebSocket error: {}", e);
+					Some(ExchangeMessage::Error(format!("WebSocket error: {e}")))
+				},
+				_ => None,
+			}
+		});
+
+		Ok(Box::pin(message_stream))
 	}
 
 	async fn stream_candles(&self, symbols: &[Symbol], intervals: &[&str]) -> Result<MessageStream> {

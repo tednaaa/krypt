@@ -24,6 +24,10 @@ pub trait Exchange: Send + Sync {
 	/// Connects to WebSocket and streams candles for multiple symbols
 	async fn stream_candles(&self, symbols: &[Symbol], intervals: &[&str]) -> Result<MessageStream>;
 
+	/// Connects to WebSocket and streams price updates (ticker) for multiple symbols
+	/// This is more efficient than streaming candles when only price monitoring is needed
+	async fn stream_prices(&self, symbols: &[Symbol]) -> Result<MessageStream>;
+
 	/// Fetches derivatives metrics (OI, funding, long/short ratio) via REST
 	async fn fetch_derivatives_metrics(&self, symbol: &Symbol) -> Result<DerivativesMetrics>;
 
