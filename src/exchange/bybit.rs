@@ -25,10 +25,6 @@ impl BybitExchange {
 
 #[async_trait]
 impl Exchange for BybitExchange {
-	fn name(&self) -> &'static str {
-		"bybit"
-	}
-
 	async fn symbols(&self) -> Result<Vec<Symbol>> {
 		let url = format!("{}/v5/market/instruments-info?category=linear", self.config.api_url);
 		let response: InstrumentsResponse = self.client.get(&url).send().await?.json().await?;

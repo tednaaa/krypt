@@ -85,16 +85,17 @@ impl TelegramBot {
 			},
 		);
 
-		let ls_str = if let (Some(long), Some(short)) = (analysis.long_short_ratio.long_pct, analysis.long_short_ratio.short_pct) {
-			format!(
-				"Longs: {:.0}% - Shorts: {:.0}%{}",
-				long,
-				short,
-				if analysis.long_short_ratio.is_overheated { " ✅ +1 for short" } else { "" }
-			)
-		} else {
-			"Longs/Shorts: N/A".to_string()
-		};
+		let ls_str =
+			if let (Some(long), Some(short)) = (analysis.long_short_ratio.long_pct, analysis.long_short_ratio.short_pct) {
+				format!(
+					"Longs: {:.0}% - Shorts: {:.0}%{}",
+					long,
+					short,
+					if analysis.long_short_ratio.is_overheated { " ✅ +1 for short" } else { "" }
+				)
+			} else {
+				"Longs/Shorts: N/A".to_string()
+			};
 
 		let volume_str = format!(
 			"Volume: {:.1}x{}",
@@ -102,29 +103,33 @@ impl TelegramBot {
 			if analysis.volume.is_significant { " ✅ significant" } else { "" }
 		);
 
-		let ema_str = analysis.ema_status.ema50_distance.map_or_else(
-			|| "EMA: N/A".to_string(),
-			|ema50| {
-				let mut parts = vec![format!("EMA50: +{ema50:.1}%")];
-				if let Some(ema200) = analysis.ema_status.ema200_distance {
-					parts.push(format!("EMA200: +{ema200:.1}%"));
-				}
-				if analysis.ema_status.is_extended {
-					parts.push("✅ +1 for short".to_string());
-				}
-				format!("EMA: {}", parts.join(", "))
-			},
-		);
+		let ema_str = if let Some(ema50) = analysis.ema_status.ema50_distance {
+			let ema50_sign = if ema50 >= 0.0 { "+" } else { "" };
+			let mut parts = vec![format!("EMA50: {ema50_sign}{ema50:.1}%")];
+			
+			if let Some(ema200) = analysis.ema_status.ema200_distance {
+				let ema200_sign = if ema200 >= 0.0 { "+" } else { "" };
+				parts.push(format!("EMA200: {ema200_sign}{ema200:.1}%"));
+			}
+			
+			if analysis.ema_status.is_extended {
+				parts.push("✅ extended (+1 for short)".to_string());
+			}
+			
+			parts.join(", ")
+		} else {
+			"N/A".to_string()
+		};
 
-		let pivot_str = analysis.pivot_status.level.as_ref().map_or_else(
-			|| "Pivot: N/A".to_string(),
-			|level| {
-				format!(
-					"Pivot: {level}{}",
-					if analysis.pivot_status.is_near_resistance { " ✅ +1 for short" } else { "" }
-				)
-			},
-		);
+		let pivot_str = if let Some(ref level) = analysis.pivot_status.level {
+			if analysis.pivot_status.is_near_resistance {
+				format!("{level} ✅ at resistance (+1 for short)")
+			} else {
+				level.clone()
+			}
+		} else {
+			"N/A".to_string()
+		};
 
 		let coinglass_url = format!("https://www.coinglass.com/tv/{}{}", candidate.symbol.base, candidate.symbol.quote);
 
@@ -134,12 +139,15 @@ impl TelegramBot {
 			<b>Price:</b> {price:.2} USDT (+{change_pct:.1}% in {time_mins}m)\n\
 			<b>Short Score:</b> {}/6 ⭐️\n\
 			\n\
+			<b>Derivatives:</b>\n\
 			{oi_str}\n\
 			{funding_str}\n\
 			{ls_str}\n\
+			\n\
+			<b>Technical:</b>\n\
 			{volume_str}\n\
-			{ema_str}\n\
-			{pivot_str}\n\
+			EMA: {ema_str}\n\
+			Pivot: {pivot_str}\n\
 			\n\
 			🔗 <a href=\"{coinglass_url}\">Coinglass</a>",
 			analysis.total_score
@@ -161,7 +169,6 @@ impl TelegramBot {
 
 		request.await.context("Failed to send test message")?;
 
-		info!("Telegram bot connection verified");
 		Ok(())
 	}
 }
@@ -211,11 +218,7 @@ mod tests {
 
 		let candidate = PumpCandidate {
 			symbol: Symbol::new("BTC", "USDT", "binance"),
-			price_change: PriceChange {
-				start_price: 50000.0,
-				change_pct: 5.0,
-				time_elapsed_mins: 10,
-			},
+			price_change: PriceChange { start_price: 50000.0, change_pct: 5.0, time_elapsed_mins: 10 },
 			volume_ratio: 3.1,
 			current_price: 52500.0,
 		};

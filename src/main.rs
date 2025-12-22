@@ -6,7 +6,7 @@ mod telegram;
 
 use anyhow::{Context, Result};
 use config::Config;
-use exchange::{create_exchange, Exchange, ExchangeMessage, Ticker};
+use exchange::{create_exchange, Exchange, ExchangeMessage, ExchangeType, Ticker};
 use futures_util::StreamExt;
 use pump_scanner::{PumpDetector, SignalAnalysis, TrackerManager};
 use std::collections::HashSet;
@@ -44,8 +44,8 @@ async fn main() -> Result<()> {
 	let pump_detector = Arc::new(PumpDetector::new(config.pump.clone()));
 	let tracker_manager = Arc::new(RwLock::new(TrackerManager::new(config.technical.emas.clone())));
 
-	let binance = create_exchange("binance", &config)?;
-	let bybit = create_exchange("bybit", &config)?;
+	let binance = create_exchange(ExchangeType::Binance, &config)?;
+	let bybit = create_exchange(ExchangeType::Bybit, &config)?;
 
 	info!("✅ Exchange connections initialized");
 
@@ -56,9 +56,7 @@ async fn main() -> Result<()> {
 			info!("Fetched {} symbols from Binance", symbols.len());
 			all_symbols.extend(symbols);
 		},
-		Err(e) => {
-			warn!("Failed to fetch Binance symbols: {}", e);
-		},
+		Err(e) => warn!("Failed to fetch Binance symbols: {}", e),
 	}
 
 	match bybit.symbols().await {
@@ -66,9 +64,7 @@ async fn main() -> Result<()> {
 			info!("Fetched {} symbols from Bybit", symbols.len());
 			all_symbols.extend(symbols);
 		},
-		Err(e) => {
-			warn!("Failed to fetch Bybit symbols: {}", e);
-		},
+		Err(e) => warn!("Failed to fetch Bybit symbols: {}", e),
 	}
 
 	if all_symbols.is_empty() {
@@ -112,20 +108,7 @@ async fn main() -> Result<()> {
 		})
 	};
 
-	let pivot_task = {
-		let tracker_manager = Arc::clone(&tracker_manager);
-		let tracked_symbols = tracked_symbols.clone();
-		let pivot_interval_mins = config.technical.pivot_timeframe_mins;
-		let config_clone = config.clone();
-
-		tokio::spawn(async move {
-			if let Err(e) = run_pivot_update_task(tracked_symbols, tracker_manager, pivot_interval_mins, config_clone).await {
-				error!("Pivot update task failed: {}", e);
-			}
-		})
-	};
-
-	// Task 4: Cleanup stale trackers
+	// Task 3: Cleanup stale trackers
 	let cleanup_task = {
 		let tracker_manager = Arc::clone(&tracker_manager);
 
@@ -153,7 +136,6 @@ async fn main() -> Result<()> {
 
 	tokio::select! {
 		_ = price_stream_task => warn!("Price stream task ended"),
-		_ = pivot_task => warn!("Pivot task ended"),
 		_ = cleanup_task => warn!("Cleanup task ended"),
 	}
 
@@ -203,7 +185,7 @@ async fn run_price_stream_task(params: PriceStreamParams) -> Result<()> {
 		let binance_symbols_clone = binance_symbols.clone();
 
 		let binance_task = tokio::spawn(async move {
-			let binance_ws = match create_exchange("binance", &config_clone) {
+			let binance_ws = match create_exchange(ExchangeType::Binance, &config_clone) {
 				Ok(e) => e,
 				Err(e) => {
 					error!("Failed to create Binance WebSocket client: {}", e);
@@ -211,7 +193,7 @@ async fn run_price_stream_task(params: PriceStreamParams) -> Result<()> {
 				},
 			};
 
-			let binance_rest = match create_exchange("binance", &config_clone) {
+			let binance_rest = match create_exchange(ExchangeType::Binance, &config_clone) {
 				Ok(e) => e,
 				Err(e) => {
 					error!("Failed to create Binance REST client: {}", e);
@@ -262,7 +244,7 @@ async fn run_price_stream_task(params: PriceStreamParams) -> Result<()> {
 		let bybit_symbols_clone = bybit_symbols.clone();
 
 		let bybit_task = tokio::spawn(async move {
-			let bybit_ws = match create_exchange("bybit", &config_clone) {
+			let bybit_ws = match create_exchange(ExchangeType::Bybit, &config_clone) {
 				Ok(e) => e,
 				Err(e) => {
 					error!("Failed to create Bybit WebSocket client: {}", e);
@@ -270,7 +252,7 @@ async fn run_price_stream_task(params: PriceStreamParams) -> Result<()> {
 				},
 			};
 
-			let bybit_rest = match create_exchange("bybit", &config_clone) {
+			let bybit_rest = match create_exchange(ExchangeType::Bybit, &config_clone) {
 				Ok(e) => e,
 				Err(e) => {
 					error!("Failed to create Bybit REST client: {}", e);
@@ -361,9 +343,10 @@ async fn process_price_update(params: PriceUpdateParams<'_>) {
 				info!(
 					symbol = %ticker.symbol,
 					change_pct = price_change.change_pct,
-					"Price pump detected, fetching detailed metrics..."
+					"Price pump detected, fetching detailed metrics and pivot levels..."
 				);
 
+				// Fetch derivatives metrics (OI, funding, long/short ratio)
 				match exchange.fetch_derivatives_metrics(&ticker.symbol).await {
 					Ok(metrics) => {
 						let mut manager = tracker_manager.write().await;
@@ -371,18 +354,42 @@ async fn process_price_update(params: PriceUpdateParams<'_>) {
 							tracker.update_derivatives(metrics);
 						}
 						drop(manager);
-
-						let mut fetched = fetched_symbols.write().await;
-						fetched.insert(ticker.symbol.clone());
 					},
 					Err(e) => {
 						warn!(
 							symbol = %ticker.symbol,
 							error = %e,
-							"Failed to fetch detailed metrics"
+							"Failed to fetch derivatives metrics"
 						);
 					},
 				}
+
+				// Fetch historical candles for pivot levels
+				let pivot_interval_mins = config.technical.pivot_timeframe_mins;
+				let interval = exchange.format_interval(pivot_interval_mins as u32);
+				match exchange.fetch_historical_candles(&ticker.symbol, &interval, 10).await {
+					Ok(candles) => {
+						let mut manager = tracker_manager.write().await;
+						if let Some(tracker) = manager.get_mut(&ticker.symbol) {
+							tracker.update_pivot_levels(&candles);
+							debug!(
+								symbol = %ticker.symbol,
+								"Updated pivot levels for pump"
+							);
+						}
+					},
+					Err(e) => {
+						warn!(
+							symbol = %ticker.symbol,
+							error = %e,
+							"Failed to fetch historical candles for pivots"
+						);
+					},
+				}
+
+				// Mark symbol as fetched
+				let mut fetched = fetched_symbols.write().await;
+				fetched.insert(ticker.symbol.clone());
 			}
 
 			true
@@ -431,99 +438,3 @@ async fn process_price_update(params: PriceUpdateParams<'_>) {
 	}
 }
 
-async fn run_pivot_update_task(
-	symbols: Vec<exchange::Symbol>,
-	tracker_manager: Arc<RwLock<TrackerManager>>,
-	pivot_interval_mins: u64,
-	config: Config,
-) -> Result<()> {
-	let mut update_interval = interval(Duration::from_secs(pivot_interval_mins * 60));
-
-	let exchanges = [create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
-
-	let delay_per_request_ms = if symbols.len() > 100 {
-		200
-	} else if symbols.len() > 50 {
-		150
-	} else {
-		100
-	};
-
-	info!(
-		"Starting pivot update task (interval: {}m, {} symbols, {}ms delay)",
-		pivot_interval_mins,
-		symbols.len(),
-		delay_per_request_ms
-	);
-
-	loop {
-		update_interval.tick().await;
-
-		let start_time = std::time::Instant::now();
-		let mut success_count = 0;
-		let mut error_count = 0;
-		let mut error_samples: Vec<(String, String)> = Vec::new();
-		let max_error_samples = 5;
-
-		for symbol in &symbols {
-			let exchange = exchanges.iter().find(|e| e.name() == symbol.exchange.as_str());
-
-			if let Some(exchange) = exchange {
-				let interval = exchange.format_interval(pivot_interval_mins as u32);
-				match exchange.fetch_historical_candles(symbol, &interval, 10).await {
-					Ok(candles) => {
-						let mut manager = tracker_manager.write().await;
-						if let Some(tracker) = manager.get_mut(symbol) {
-							tracker.update_pivot_levels(&candles);
-							success_count += 1;
-							debug!(
-								symbol = %symbol,
-								"Updated pivot levels"
-							);
-						}
-					},
-					Err(e) => {
-						error_count += 1;
-
-						if error_samples.len() < max_error_samples {
-							error_samples.push((symbol.to_string(), e.to_string()));
-						}
-
-						debug!(
-							symbol = %symbol,
-							error = %e,
-							"Failed to fetch historical candles for pivots"
-						);
-					},
-				}
-			}
-
-			tokio::time::sleep(Duration::from_millis(delay_per_request_ms)).await;
-		}
-
-		let elapsed = start_time.elapsed();
-
-		if error_count > 0 {
-			warn!(
-				"Pivot poll completed: {} success, {} errors, took {:.1}s",
-				success_count,
-				error_count,
-				elapsed.as_secs_f64()
-			);
-
-			if !error_samples.is_empty() {
-				warn!("Sample pivot poll errors:");
-				for (symbol, error) in error_samples.iter().take(3) {
-					warn!("  {} → {}", symbol, error);
-				}
-			}
-		} else {
-			info!(
-				"Pivot poll completed: {} success, {} errors, took {:.1}s",
-				success_count,
-				error_count,
-				elapsed.as_secs_f64()
-			);
-		}
-	}
-}

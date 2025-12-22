@@ -11,10 +11,14 @@ pub use types::*;
 
 pub type MessageStream = Pin<Box<dyn Stream<Item = ExchangeMessage> + Send>>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExchangeType {
+	Binance,
+	Bybit,
+}
+
 #[async_trait]
 pub trait Exchange: Send + Sync {
-	fn name(&self) -> &'static str;
-
 	async fn symbols(&self) -> Result<Vec<Symbol>>;
 
 	async fn stream_prices(&self, symbols: &[Symbol]) -> Result<MessageStream>;
@@ -28,10 +32,9 @@ pub trait Exchange: Send + Sync {
 	}
 }
 
-pub fn create_exchange(name: &str, config: &crate::config::Config) -> Result<Box<dyn Exchange>> {
-	match name.to_lowercase().as_str() {
-		"binance" => Ok(Box::new(binance::BinanceExchange::new(config.binance.clone())?)),
-		"bybit" => Ok(Box::new(bybit::BybitExchange::new(config.bybit.clone())?)),
-		_ => anyhow::bail!("Unsupported exchange: {name}"),
+pub fn create_exchange(exchange_type: ExchangeType, config: &crate::config::Config) -> Result<Box<dyn Exchange>> {
+	match exchange_type {
+		ExchangeType::Binance => Ok(Box::new(binance::BinanceExchange::new(config.binance.clone())?)),
+		ExchangeType::Bybit => Ok(Box::new(bybit::BybitExchange::new(config.bybit.clone())?)),
 	}
 }

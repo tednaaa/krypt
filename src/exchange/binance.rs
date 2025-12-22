@@ -27,10 +27,6 @@ impl BinanceExchange {
 
 #[async_trait]
 impl Exchange for BinanceExchange {
-	fn name(&self) -> &'static str {
-		"binance"
-	}
-
 	async fn symbols(&self) -> Result<Vec<Symbol>> {
 		let url = format!("{}/fapi/v1/exchangeInfo", self.config.api_url);
 		let response: ExchangeInfo = self.client.get(&url).send().await?.json().await?;
