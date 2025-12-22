@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use config::Config;
 use exchange::{create_exchange, Exchange, ExchangeMessage, Ticker};
 use futures_util::StreamExt;
-use pump_scanner::{OverheatingQualifier, PumpDetector, TrackerManager};
+use pump_scanner::{PumpDetector, SignalAnalysis, TrackerManager};
 use std::collections::HashSet;
 use std::sync::Arc;
 use telegram::TelegramBot;
@@ -20,7 +20,6 @@ use crate::exchange::Symbol;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-	// Initialize tracing
 	tracing_subscriber::fmt()
 		.with_env_filter(
 			tracing_subscriber::EnvFilter::try_from_default_env()
@@ -28,16 +27,13 @@ async fn main() -> Result<()> {
 		)
 		.init();
 
-	info!("🚀 Starting Pump Scanner → Short Bias Alert Bot");
+	info!("🚀 Starting krypt");
 
-	// Load configuration
 	let config = Config::load("config.toml").context("Failed to load configuration")?;
 	info!("✅ Configuration loaded");
 
-	// Initialize Telegram bot
 	let telegram = TelegramBot::new(config.telegram.clone());
 
-	// Test Telegram connection
 	if let Err(e) = telegram.test_connection().await {
 		error!("Failed to connect to Telegram: {}", e);
 		error!("Please verify your bot token and chat ID in config.toml");
@@ -45,18 +41,14 @@ async fn main() -> Result<()> {
 	}
 	info!("✅ Telegram bot connected");
 
-	// Initialize components
 	let pump_detector = Arc::new(PumpDetector::new(config.pump.clone()));
-	let qualifier = Arc::new(OverheatingQualifier::new(config.derivatives.clone(), config.technical.clone()));
 	let tracker_manager = Arc::new(RwLock::new(TrackerManager::new(config.technical.emas.clone())));
 
-	// Create exchange instances
 	let binance = create_exchange("binance", &config)?;
 	let bybit = create_exchange("bybit", &config)?;
 
 	info!("✅ Exchange connections initialized");
 
-	// Fetch symbols from exchanges
 	let mut all_symbols = Vec::new();
 
 	match binance.symbols().await {
@@ -84,7 +76,6 @@ async fn main() -> Result<()> {
 		return Err(anyhow::anyhow!("No symbols available"));
 	}
 
-	// Filter out invalid symbols (non-ASCII characters, special symbols)
 	let initial_count = all_symbols.len();
 	all_symbols.retain(Symbol::is_valid);
 	if initial_count != all_symbols.len() {
@@ -100,43 +91,27 @@ async fn main() -> Result<()> {
 		tracked_symbols.iter().filter(|s| s.exchange == "bybit").count()
 	);
 
-	// Spawn background tasks
 	let telegram_arc = Arc::new(telegram);
 
-	// Task 1: Stream prices and detect pumps, fetch detailed metrics on-demand
 	let price_stream_task = {
-		let tracker_manager = Arc::clone(&tracker_manager);
-		let pump_detector = Arc::clone(&pump_detector);
-		let qualifier = Arc::clone(&qualifier);
-		let telegram = Arc::clone(&telegram_arc);
-		let symbols = tracked_symbols.clone();
-		let cooldown_secs = config.telegram.alert_cooldown_secs;
-		let price_threshold_pct = config.pump.price_threshold_pct;
-		let price_window_mins = config.pump.max_window_mins;
-		let config_clone = config.clone();
+		let params = PriceStreamParams {
+			symbols: tracked_symbols.clone(),
+			tracker_manager: Arc::clone(&tracker_manager),
+			pump_detector: Arc::clone(&pump_detector),
+			telegram: Arc::clone(&telegram_arc),
+			cooldown_secs: config.telegram.alert_cooldown_secs,
+			price_threshold_pct: config.pump.price_threshold_pct,
+			price_window_mins: config.pump.max_window_mins,
+			config: config.clone(),
+		};
 
 		tokio::spawn(async move {
-			if let Err(e) = run_price_stream_task(
-				binance,
-				bybit,
-				symbols,
-				tracker_manager,
-				pump_detector,
-				qualifier,
-				telegram,
-				cooldown_secs,
-				price_threshold_pct,
-				price_window_mins,
-				config_clone,
-			)
-			.await
-			{
+			if let Err(e) = run_price_stream_task(params).await {
 				error!("Price stream task failed: {}", e);
 			}
 		})
 	};
 
-	// Task 3: Periodically fetch pivot levels
 	let pivot_task = {
 		let tracker_manager = Arc::clone(&tracker_manager);
 		let tracked_symbols = tracked_symbols.clone();
@@ -155,14 +130,14 @@ async fn main() -> Result<()> {
 		let tracker_manager = Arc::clone(&tracker_manager);
 
 		tokio::spawn(async move {
-			let mut cleanup_interval = interval(Duration::from_secs(300)); // Every 5 minutes
+			let mut cleanup_interval = interval(Duration::from_secs(300));
 
 			loop {
 				cleanup_interval.tick().await;
 
 				let mut manager = tracker_manager.write().await;
 				let before_count = manager.count();
-				manager.cleanup_stale(1800); // Remove trackers older than 30 minutes
+				manager.cleanup_stale(1800);
 				let after_count = manager.count();
 				drop(manager);
 
@@ -176,7 +151,6 @@ async fn main() -> Result<()> {
 	info!("✅ All tasks started");
 	info!("🔍 Monitoring markets for pump signals...");
 
-	// Wait for all tasks
 	tokio::select! {
 		_ = price_stream_task => warn!("Price stream task ended"),
 		_ = pivot_task => warn!("Pivot task ended"),
@@ -186,38 +160,43 @@ async fn main() -> Result<()> {
 	Ok(())
 }
 
-/// Runs the price streaming and pump detection task
-/// Only fetches detailed metrics (OI, volume, etc.) when price pump threshold is hit
-async fn run_price_stream_task(
-	_binance: Box<dyn Exchange>,
-	_bybit: Box<dyn Exchange>,
+struct PriceStreamParams {
 	symbols: Vec<exchange::Symbol>,
 	tracker_manager: Arc<RwLock<TrackerManager>>,
 	pump_detector: Arc<PumpDetector>,
-	qualifier: Arc<OverheatingQualifier>,
 	telegram: Arc<TelegramBot>,
 	cooldown_secs: u64,
 	price_threshold_pct: f64,
 	price_window_mins: u64,
 	config: Config,
-) -> Result<()> {
-	info!("Starting price stream for {} symbols", symbols.len());
-	info!("Will fetch detailed metrics when price change >= {}% in {} minutes (using pump config)", price_threshold_pct, price_window_mins);
+}
 
-	// Split symbols by exchange
+async fn run_price_stream_task(params: PriceStreamParams) -> Result<()> {
+	let PriceStreamParams {
+		symbols,
+		tracker_manager,
+		pump_detector,
+		telegram,
+		cooldown_secs,
+		price_threshold_pct,
+		price_window_mins,
+		config,
+	} = params;
+	info!("Starting price stream for {} symbols", symbols.len());
+	info!(
+		"Will fetch detailed metrics when price change >= {}% in {} minutes (using pump config)",
+		price_threshold_pct, price_window_mins
+	);
 	let binance_symbols: Vec<_> = symbols.iter().filter(|s| s.exchange == "binance").cloned().collect();
 	let bybit_symbols: Vec<_> = symbols.iter().filter(|s| s.exchange == "bybit").cloned().collect();
 
-	// Track symbols that have triggered detailed metrics fetch (to avoid duplicate fetches)
 	let fetched_symbols: Arc<RwLock<HashSet<Symbol>>> = Arc::new(RwLock::new(HashSet::new()));
 
-	// Spawn tasks for each exchange's price stream
 	let mut tasks = Vec::new();
 
 	if !binance_symbols.is_empty() {
 		let tracker_manager_clone = Arc::clone(&tracker_manager);
 		let pump_detector_clone = Arc::clone(&pump_detector);
-		let qualifier_clone = Arc::clone(&qualifier);
 		let telegram_clone = Arc::clone(&telegram);
 		let fetched_symbols_clone = Arc::clone(&fetched_symbols);
 		let config_clone = config.clone();
@@ -251,24 +230,23 @@ async fn run_price_stream_task(
 			while let Some(message) = stream.next().await {
 				match message {
 					ExchangeMessage::Ticker(ticker) => {
-						process_price_update(
+						process_price_update(PriceUpdateParams {
 							ticker,
-							&tracker_manager_clone,
-							&pump_detector_clone,
-							&qualifier_clone,
-							&telegram_clone,
+							tracker_manager: &tracker_manager_clone,
+							pump_detector: &pump_detector_clone,
+							telegram: &telegram_clone,
 							cooldown_secs,
 							price_threshold_pct,
 							price_window_mins,
-							&binance_rest,
-							&fetched_symbols_clone,
-						)
+							exchange: binance_rest.as_ref(),
+							fetched_symbols: &fetched_symbols_clone,
+							config: &config_clone,
+						})
 						.await;
 					},
 					ExchangeMessage::Error(err) => {
 						warn!("Binance price stream error: {}", err);
 					},
-					_ => {},
 				}
 			}
 		});
@@ -278,7 +256,6 @@ async fn run_price_stream_task(
 	if !bybit_symbols.is_empty() {
 		let tracker_manager_clone = Arc::clone(&tracker_manager);
 		let pump_detector_clone = Arc::clone(&pump_detector);
-		let qualifier_clone = Arc::clone(&qualifier);
 		let telegram_clone = Arc::clone(&telegram);
 		let fetched_symbols_clone = Arc::clone(&fetched_symbols);
 		let config_clone = config.clone();
@@ -312,24 +289,23 @@ async fn run_price_stream_task(
 			while let Some(message) = stream.next().await {
 				match message {
 					ExchangeMessage::Ticker(ticker) => {
-						process_price_update(
+						process_price_update(PriceUpdateParams {
 							ticker,
-							&tracker_manager_clone,
-							&pump_detector_clone,
-							&qualifier_clone,
-							&telegram_clone,
+							tracker_manager: &tracker_manager_clone,
+							pump_detector: &pump_detector_clone,
+							telegram: &telegram_clone,
 							cooldown_secs,
 							price_threshold_pct,
 							price_window_mins,
-							&bybit_rest,
-							&fetched_symbols_clone,
-						)
+							exchange: bybit_rest.as_ref(),
+							fetched_symbols: &fetched_symbols_clone,
+							config: &config_clone,
+						})
 						.await;
 					},
 					ExchangeMessage::Error(err) => {
 						warn!("Bybit price stream error: {}", err);
 					},
-					_ => {},
 				}
 			}
 		});
@@ -343,38 +319,45 @@ async fn run_price_stream_task(
 	Ok(())
 }
 
-/// Processes a price update and checks for pump signals
-/// Fetches detailed metrics via REST API when price threshold is hit
-async fn process_price_update(
+struct PriceUpdateParams<'a> {
 	ticker: Ticker,
-	tracker_manager: &Arc<RwLock<TrackerManager>>,
-	pump_detector: &Arc<PumpDetector>,
-	qualifier: &Arc<OverheatingQualifier>,
-	telegram: &Arc<TelegramBot>,
+	tracker_manager: &'a Arc<RwLock<TrackerManager>>,
+	pump_detector: &'a Arc<PumpDetector>,
+	telegram: &'a Arc<TelegramBot>,
 	cooldown_secs: u64,
 	price_threshold_pct: f64,
 	price_window_mins: u64,
-	exchange: &Box<dyn Exchange>,
-	fetched_symbols: &Arc<RwLock<HashSet<Symbol>>>,
-) {
+	exchange: &'a dyn Exchange,
+	fetched_symbols: &'a Arc<RwLock<HashSet<Symbol>>>,
+	config: &'a Config,
+}
+
+async fn process_price_update(params: PriceUpdateParams<'_>) {
+	let PriceUpdateParams {
+		ticker,
+		tracker_manager,
+		pump_detector,
+		telegram,
+		cooldown_secs,
+		price_threshold_pct,
+		price_window_mins,
+		exchange,
+		fetched_symbols,
+		config,
+	} = params;
 	let mut manager = tracker_manager.write().await;
 	let tracker = manager.get_or_create(ticker.symbol.clone());
 
-	// Update tracker with new price
 	tracker.update_from_price(ticker.last_price, ticker.timestamp);
-
-	// Check if price change exceeds threshold
 	let price_window_secs = price_window_mins * 60;
 	let should_check_pump = if let Some(price_change) = tracker.price_change_in_window(price_window_secs) {
 		if price_change.change_pct >= price_threshold_pct {
-			// Check if we've already fetched detailed metrics for this symbol
 			let fetched = fetched_symbols.read().await;
 			let needs_fetch = !fetched.contains(&ticker.symbol);
 			drop(fetched);
 			drop(manager);
 
 			if needs_fetch {
-				// Fetch detailed metrics via REST API
 				info!(
 					symbol = %ticker.symbol,
 					change_pct = price_change.change_pct,
@@ -410,62 +393,44 @@ async fn process_price_update(
 		false
 	};
 
-	// Check for pump and send alerts if threshold was hit
 	if should_check_pump {
 		let mut manager = tracker_manager.write().await;
 		if let Some(tracker) = manager.get_mut(&ticker.symbol) {
-			// Skip if in cooldown
 			if tracker.is_in_cooldown(cooldown_secs) {
 				drop(manager);
 				return;
 			}
 
-			// Detect pump candidate
 			if let Some(candidate) = pump_detector.analyze(tracker) {
-				debug!(
+				info!(
 					symbol = %candidate.symbol,
 					change = %candidate.price_change.change_pct,
-					"Pump candidate detected, checking qualification..."
+					"Pump detected! Analyzing and sending alert..."
 				);
 
-				// Qualify the pump
-				if let Some(qualification) = qualifier.qualify(&candidate, tracker) {
+				let analysis = SignalAnalysis::analyze(&candidate, tracker, &config.derivatives, &config.technical);
+
+				if let Err(e) = telegram.post_alert(&candidate, &analysis).await {
+					error!(
+						symbol = %candidate.symbol,
+						error = %e,
+						"Failed to send Telegram alert"
+					);
+				} else {
+					tracker.mark_alerted();
 					info!(
 						symbol = %candidate.symbol,
-						score = qualification.score,
-						"Pump qualified! Sending alert..."
-					);
-
-					// Send Telegram alert
-					if let Err(e) = telegram.post_alert(&candidate, &qualification).await {
-						error!(
-							symbol = %candidate.symbol,
-							error = %e,
-							"Failed to send Telegram alert"
-						);
-					} else {
-						// Mark as alerted
-						tracker.mark_alerted();
-						info!(
-							symbol = %candidate.symbol,
-							"Alert sent successfully"
-						);
-					}
-				} else {
-					debug!(
-						symbol = %candidate.symbol,
-						"Pump not qualified - insufficient overheating conditions"
+						score = analysis.total_score,
+						"Alert sent successfully"
 					);
 				}
 			}
 
-			// Update pump candidate state
 			pump_detector.update_candidate(tracker);
 		}
 	}
 }
 
-/// Runs the pivot levels update task
 async fn run_pivot_update_task(
 	symbols: Vec<exchange::Symbol>,
 	tracker_manager: Arc<RwLock<TrackerManager>>,
@@ -474,16 +439,14 @@ async fn run_pivot_update_task(
 ) -> Result<()> {
 	let mut update_interval = interval(Duration::from_secs(pivot_interval_mins * 60));
 
-	// Create exchange instances for REST API calls
 	let exchanges = [create_exchange("binance", &config)?, create_exchange("bybit", &config)?];
 
-	// Calculate safe delay between requests to avoid rate limits
 	let delay_per_request_ms = if symbols.len() > 100 {
-		200 // 5 req/sec for many symbols
+		200
 	} else if symbols.len() > 50 {
-		150 // ~6.6 req/sec
+		150
 	} else {
-		100 // 10 req/sec for few symbols
+		100
 	};
 
 	info!(
@@ -503,11 +466,9 @@ async fn run_pivot_update_task(
 		let max_error_samples = 5;
 
 		for symbol in &symbols {
-			// Find the correct exchange for this symbol
 			let exchange = exchanges.iter().find(|e| e.name() == symbol.exchange.as_str());
 
 			if let Some(exchange) = exchange {
-				// Fetch historical candles for pivot calculation
 				let interval = exchange.format_interval(pivot_interval_mins as u32);
 				match exchange.fetch_historical_candles(symbol, &interval, 10).await {
 					Ok(candles) => {
@@ -524,7 +485,6 @@ async fn run_pivot_update_task(
 					Err(e) => {
 						error_count += 1;
 
-						// Collect sample errors for logging
 						if error_samples.len() < max_error_samples {
 							error_samples.push((symbol.to_string(), e.to_string()));
 						}
@@ -538,7 +498,6 @@ async fn run_pivot_update_task(
 				}
 			}
 
-			// Rate limiting delay
 			tokio::time::sleep(Duration::from_millis(delay_per_request_ms)).await;
 		}
 
@@ -552,7 +511,6 @@ async fn run_pivot_update_task(
 				elapsed.as_secs_f64()
 			);
 
-			// Log sample errors to help diagnose issues
 			if !error_samples.is_empty() {
 				warn!("Sample pivot poll errors:");
 				for (symbol, error) in error_samples.iter().take(3) {

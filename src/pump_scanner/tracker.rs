@@ -1,16 +1,15 @@
 use crate::exchange::{Candle, DerivativesMetrics, Symbol};
-use crate::indicators::{MultiEMA, PivotLevels};
+use crate::indicators::{MultiEma, PivotLevels};
 use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, VecDeque};
 
-/// Tracks state for a single symbol during pump detection
 #[derive(Debug, Clone)]
 pub struct SymbolTracker {
 	pub symbol: Symbol,
 	pub price_history: VecDeque<PricePoint>,
 	pub volume_history: VecDeque<f64>,
-	pub ema_1m: MultiEMA,
-	pub ema_5m: MultiEMA,
+	pub ema_1m: MultiEma,
+	pub ema_5m: MultiEma,
 	pub pivot_levels: Option<PivotLevels>,
 	pub last_derivatives: Option<DerivativesMetrics>,
 	pub baseline_derivatives: Option<DerivativesMetrics>,
@@ -37,10 +36,10 @@ impl SymbolTracker {
 	pub fn new(symbol: Symbol, ema_periods: &[u32]) -> Self {
 		Self {
 			symbol,
-			price_history: VecDeque::with_capacity(1200), // ~20 minutes at 1 update/sec
-			volume_history: VecDeque::with_capacity(60),  // 1 hour of 1m candles
-			ema_1m: MultiEMA::new(ema_periods),
-			ema_5m: MultiEMA::new(ema_periods),
+			price_history: VecDeque::with_capacity(1200),
+			volume_history: VecDeque::with_capacity(60),
+			ema_1m: MultiEma::new(ema_periods),
+			ema_5m: MultiEma::new(ema_periods),
 			pivot_levels: None,
 			last_derivatives: None,
 			baseline_derivatives: None,
@@ -50,57 +49,25 @@ impl SymbolTracker {
 		}
 	}
 
-	/// Updates price history with a new candle
-	pub fn update_from_candle(&mut self, candle: &Candle) {
-		let price_point = PricePoint { timestamp: candle.timestamp, price: candle.close, volume: candle.volume };
-
-		self.price_history.push_back(price_point);
-		self.last_update = candle.timestamp;
-
-		// Keep last 20 minutes of price data (to support 15 min detection window + buffer)
-		let cutoff = candle.timestamp - Duration::seconds(1200);
-		while self.price_history.front().is_some_and(|p| p.timestamp < cutoff) {
-			self.price_history.pop_front();
-		}
-
-		// Update volume history
-		self.volume_history.push_back(candle.volume);
-		if self.volume_history.len() > 60 {
-			self.volume_history.pop_front();
-		}
-
-		// Update EMAs based on interval
-		match candle.interval.as_str() {
-			"1m" => self.ema_1m.update_from_candle(candle),
-			"5m" => self.ema_5m.update_from_candle(candle),
-			_ => {},
-		}
-	}
-
-	/// Updates price history with a new price ticker update
 	pub fn update_from_price(&mut self, price: f64, timestamp: DateTime<Utc>) {
-		let price_point = PricePoint { timestamp, price, volume: 0.0 }; // Volume not available from ticker
+		let price_point = PricePoint { timestamp, price, volume: 0.0 };
 
 		self.price_history.push_back(price_point);
 		self.last_update = timestamp;
 
-		// Keep last 20 minutes of price data (to support 15 min detection window + buffer)
 		let cutoff = timestamp - Duration::seconds(1200);
 		while self.price_history.front().is_some_and(|p| p.timestamp < cutoff) {
 			self.price_history.pop_front();
 		}
 	}
 
-	/// Updates pivot levels from historical candles
 	pub fn update_pivot_levels(&mut self, candles: &[Candle]) {
 		if let Some(pivots) = PivotLevels::from_candles(candles) {
 			self.pivot_levels = Some(pivots);
 		}
 	}
 
-	/// Updates derivatives metrics
 	pub fn update_derivatives(&mut self, metrics: DerivativesMetrics) {
-		// Store baseline if not set (first fetch)
 		if self.baseline_derivatives.is_none() {
 			self.baseline_derivatives = Some(metrics.clone());
 		}
@@ -108,7 +75,6 @@ impl SymbolTracker {
 		self.last_derivatives = Some(metrics);
 	}
 
-	/// Calculates price change over a time window
 	pub fn price_change_in_window(&self, window_secs: u64) -> Option<PriceChange> {
 		if self.price_history.len() < 2 {
 			return None;
@@ -117,7 +83,6 @@ impl SymbolTracker {
 		let now = self.last_update;
 		let window_start = now - Duration::seconds(i64::try_from(window_secs).unwrap_or(i64::MAX));
 
-		// Find first price point within window
 		let start_point = self.price_history.iter().find(|p| p.timestamp >= window_start)?;
 
 		let end_point = self.price_history.back()?;
@@ -127,15 +92,11 @@ impl SymbolTracker {
 
 		Some(PriceChange {
 			start_price: start_point.price,
-			end_price: end_point.price,
 			change_pct: price_change_pct,
 			time_elapsed_mins: u64::try_from(time_elapsed_mins).unwrap_or(0),
-			start_time: start_point.timestamp,
-			end_time: end_point.timestamp,
 		})
 	}
 
-	/// Calculates average volume over history
 	pub fn average_volume(&self) -> f64 {
 		if self.volume_history.is_empty() {
 			return 0.0;
@@ -145,18 +106,14 @@ impl SymbolTracker {
 		sum / self.volume_history.len() as f64
 	}
 
-	/// Calculates baseline average volume excluding recent window (to avoid including pump volume in baseline)
 	pub fn baseline_average_volume(&self, exclude_last_mins: u64) -> f64 {
 		if self.volume_history.is_empty() {
 			return 0.0;
 		}
 
-		// Only use volume data that's older than the exclusion window
-		// This prevents recent pump volume from inflating the baseline
 		let exclude_count = exclude_last_mins.min(self.volume_history.len() as u64) as usize;
 
 		if exclude_count >= self.volume_history.len() {
-			// If we'd exclude everything, use full history
 			return self.average_volume();
 		}
 
@@ -171,29 +128,23 @@ impl SymbolTracker {
 		sum / baseline_volumes.len() as f64
 	}
 
-	/// Gets current volume from recent candles
 	pub fn current_volume(&self) -> f64 {
-		// Sum volume from last 5 minutes
 		let cutoff = self.last_update - Duration::seconds(300);
 		self.price_history.iter().filter(|p| p.timestamp >= cutoff).map(|p| p.volume).sum()
 	}
 
-	/// Gets volume within a specific time window (in seconds)
 	pub fn volume_in_window(&self, window_secs: u64) -> f64 {
 		let cutoff = self.last_update - Duration::seconds(i64::try_from(window_secs).unwrap_or(i64::MAX));
 		self.price_history.iter().filter(|p| p.timestamp >= cutoff).map(|p| p.volume).sum()
 	}
 
-	/// Calculates volume ratio for a specific window compared to baseline
 	pub fn volume_ratio_for_window(&self, window_secs: u64) -> f64 {
 		let window_volume = self.volume_in_window(window_secs);
 		let window_mins = window_secs / 60;
 
-		// Get baseline average volume per minute
 		let baseline_avg_per_min = self.baseline_average_volume(window_mins);
 
 		if baseline_avg_per_min > 0.0 {
-			// Compare window volume to expected baseline volume for same period
 			let expected_baseline = baseline_avg_per_min * window_mins as f64;
 			window_volume / expected_baseline
 		} else {
@@ -201,7 +152,6 @@ impl SymbolTracker {
 		}
 	}
 
-	/// Calculates OI increase percentage from baseline
 	pub fn oi_increase_pct(&self) -> Option<f64> {
 		let baseline = self.baseline_derivatives.as_ref()?;
 		let current = self.last_derivatives.as_ref()?;
@@ -214,12 +164,10 @@ impl SymbolTracker {
 		}
 	}
 
-	/// Gets current funding rate
 	pub fn funding_rate(&self) -> Option<f64> {
 		self.last_derivatives.as_ref().map(|d| d.funding_rate)
 	}
 
-	/// Gets current long ratio
 	pub fn long_ratio(&self) -> Option<f64> {
 		self
 			.last_derivatives
@@ -227,12 +175,10 @@ impl SymbolTracker {
 			.and_then(|d| d.long_short_ratio.as_ref().map(super::super::exchange::types::LongShortRatio::account_ratio))
 	}
 
-	/// Checks if price is extended above key EMAs
 	pub fn is_ema_extended(&self, price: f64, ema_periods: &[u32]) -> bool {
 		self.ema_1m.price_above_emas(price, ema_periods) || self.ema_5m.price_above_emas(price, ema_periods)
 	}
 
-	/// Checks if price is near pivot resistance
 	pub fn is_near_pivot_resistance(&self, price: f64, threshold_pct: f64) -> Option<String> {
 		let pivots = self.pivot_levels.as_ref()?;
 
@@ -248,18 +194,15 @@ impl SymbolTracker {
 		)
 	}
 
-	/// Resets pump state to normal
 	pub const fn reset_pump_state(&mut self) {
 		self.pump_state = PumpState::Normal;
 	}
 
-	/// Marks symbol as alerted
 	pub fn mark_alerted(&mut self) {
 		self.pump_state = PumpState::Alerted { alerted_at: Utc::now() };
 		self.last_alert_time = Some(Utc::now());
 	}
 
-	/// Checks if symbol is in cooldown period
 	pub fn is_in_cooldown(&self, cooldown_secs: u64) -> bool {
 		self.last_alert_time.is_some_and(|last_alert| {
 			let elapsed = (Utc::now() - last_alert).num_seconds();
@@ -267,7 +210,6 @@ impl SymbolTracker {
 		})
 	}
 
-	/// Gets current price
 	pub fn current_price(&self) -> Option<f64> {
 		self.price_history.back().map(|p| p.price)
 	}
@@ -276,17 +218,10 @@ impl SymbolTracker {
 #[derive(Debug, Clone)]
 pub struct PriceChange {
 	pub start_price: f64,
-	#[allow(dead_code)]
-	pub end_price: f64,
 	pub change_pct: f64,
 	pub time_elapsed_mins: u64,
-	#[allow(dead_code)]
-	pub start_time: DateTime<Utc>,
-	#[allow(dead_code)]
-	pub end_time: DateTime<Utc>,
 }
 
-/// Manages all symbol trackers
 pub struct TrackerManager {
 	trackers: HashMap<Symbol, SymbolTracker>,
 	ema_periods: Vec<u32>,
@@ -297,41 +232,19 @@ impl TrackerManager {
 		Self { trackers: HashMap::new(), ema_periods }
 	}
 
-	/// Gets or creates a tracker for a symbol
 	pub fn get_or_create(&mut self, symbol: Symbol) -> &mut SymbolTracker {
 		self.trackers.entry(symbol.clone()).or_insert_with(|| SymbolTracker::new(symbol, &self.ema_periods))
 	}
 
-	/// Gets a tracker for a symbol if it exists
-	#[allow(dead_code)]
-	pub fn get(&self, symbol: &Symbol) -> Option<&SymbolTracker> {
-		self.trackers.get(symbol)
-	}
-
-	/// Gets a mutable tracker for a symbol if it exists
 	pub fn get_mut(&mut self, symbol: &Symbol) -> Option<&mut SymbolTracker> {
 		self.trackers.get_mut(symbol)
 	}
 
-	/// Returns all trackers
-	#[allow(dead_code)]
-	pub fn all(&self) -> impl Iterator<Item = &SymbolTracker> {
-		self.trackers.values()
-	}
-
-	/// Returns all trackers mutably
-	#[allow(dead_code)]
-	pub fn all_mut(&mut self) -> impl Iterator<Item = &mut SymbolTracker> {
-		self.trackers.values_mut()
-	}
-
-	/// Removes stale trackers that haven't been updated recently
 	pub fn cleanup_stale(&mut self, max_age_secs: u64) {
 		let cutoff = Utc::now() - Duration::seconds(i64::try_from(max_age_secs).unwrap_or(i64::MAX));
 		self.trackers.retain(|_, tracker| tracker.last_update > cutoff);
 	}
 
-	/// Returns count of tracked symbols
 	pub fn count(&self) -> usize {
 		self.trackers.len()
 	}

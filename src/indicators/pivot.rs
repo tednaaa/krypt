@@ -1,6 +1,5 @@
 use crate::exchange::Candle;
 
-/// Classic pivot point levels
 #[derive(Debug, Clone)]
 pub struct PivotLevels {
 	#[allow(dead_code)]
@@ -19,21 +18,17 @@ pub struct PivotLevels {
 }
 
 impl PivotLevels {
-	/// Calculates classic pivot points from a candle (typically higher timeframe)
 	pub fn from_candle(candle: &Candle) -> Self {
 		let high = candle.high;
 		let low = candle.low;
 		let close = candle.close;
 
-		// Classic pivot formula: P = (H + L + C) / 3
 		let pivot = (high + low + close) / 3.0;
 
-		// Resistance levels
 		let resistance1 = 2.0f64.mul_add(pivot, -low);
 		let resistance2 = pivot + (high - low);
 		let resistance3 = 2.0f64.mul_add(pivot - low, high);
 
-		// Support levels
 		let support1 = 2.0f64.mul_add(pivot, -high);
 		let support2 = pivot - (high - low);
 		let support3 = 2.0f64.mul_add(-(high - pivot), low);
@@ -41,18 +36,15 @@ impl PivotLevels {
 		Self { pivot, resistance1, resistance2, resistance3, support1, support2, support3, calculated_at: candle.timestamp }
 	}
 
-	/// Calculates pivot points from multiple candles (e.g., using the last complete candle)
 	pub fn from_candles(candles: &[Candle]) -> Option<Self> {
 		if candles.is_empty() {
 			return None;
 		}
 
-		// Use the most recent complete candle
 		let candle = candles.last()?;
 		Some(Self::from_candle(candle))
 	}
 
-	/// Calculates pivot points from high, low, close values
 	#[allow(dead_code)]
 	pub fn from_hlc(high: f64, low: f64, close: f64) -> Self {
 		let pivot = (high + low + close) / 3.0;
@@ -77,7 +69,6 @@ impl PivotLevels {
 		}
 	}
 
-	/// Checks if price is near a resistance level within a threshold percentage
 	pub fn is_near_resistance(&self, price: f64, threshold_pct: f64) -> Option<ResistanceLevel> {
 		let levels = [
 			(ResistanceLevel::R1, self.resistance1),
@@ -98,7 +89,6 @@ impl PivotLevels {
 		None
 	}
 
-	/// Checks if price is near a support level within a threshold percentage
 	#[allow(dead_code)]
 	pub fn is_near_support(&self, price: f64, threshold_pct: f64) -> Option<SupportLevel> {
 		let levels =
@@ -117,14 +107,12 @@ impl PivotLevels {
 		None
 	}
 
-	/// Checks if price is near the pivot point
 	#[allow(dead_code)]
 	pub fn is_near_pivot(&self, price: f64, threshold_pct: f64) -> bool {
 		let distance_pct = ((price - self.pivot).abs() / self.pivot) * 100.0;
 		distance_pct <= threshold_pct
 	}
 
-	/// Returns the distance from price to nearest resistance as a percentage
 	#[allow(dead_code)]
 	pub fn distance_to_resistance(&self, price: f64) -> Option<(ResistanceLevel, f64)> {
 		let levels = [
@@ -143,7 +131,6 @@ impl PivotLevels {
 			.min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
 	}
 
-	/// Returns the distance from price to nearest support as a percentage
 	#[allow(dead_code)]
 	pub fn distance_to_support(&self, price: f64) -> Option<(SupportLevel, f64)> {
 		let levels =
@@ -159,24 +146,20 @@ impl PivotLevels {
 			.min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
 	}
 
-	/// Checks if price has extended into resistance zone
 	pub fn is_extended_to_resistance(&self, price: f64) -> bool {
 		price >= self.resistance1
 	}
 
-	/// Checks if price has extended into support zone
 	#[allow(dead_code)]
 	pub fn is_extended_to_support(&self, price: f64) -> bool {
 		price <= self.support1
 	}
 
-	/// Returns all resistance levels as a sorted vector
 	#[allow(dead_code)]
 	pub fn resistance_levels(&self) -> Vec<f64> {
 		vec![self.resistance1, self.resistance2, self.resistance3]
 	}
 
-	/// Returns all support levels as a sorted vector
 	#[allow(dead_code)]
 	pub fn support_levels(&self) -> Vec<f64> {
 		vec![self.support1, self.support2, self.support3]

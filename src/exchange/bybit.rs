@@ -21,45 +21,6 @@ impl BybitExchange {
 
 		Ok(Self { config, client })
 	}
-
-	fn parse_kline_message(data: &Value) -> Option<Candle> {
-		let topic = data.get("topic")?.as_str()?;
-
-		// Extract symbol and interval from topic (e.g., "kline.1.BTCUSDT")
-		let parts: Vec<&str> = topic.split('.').collect();
-		if parts.len() != 3 || parts[0] != "kline" {
-			return None;
-		}
-
-		let interval = parts[1];
-		let symbol_str = parts[2];
-
-		let kline_array = data.get("data")?.as_array()?;
-		let kline_value = kline_array.first()?;
-		let kline: BybitKlineData = serde_json::from_value(kline_value.clone()).ok()?;
-
-		let (base, quote) = parse_bybit_symbol(symbol_str)?;
-
-		let interval_str = match interval {
-			"1" => "1m",
-			"5" => "5m",
-			"15" => "15m",
-			"60" => "1h",
-			"240" => "4h",
-			_ => interval,
-		};
-
-		Some(Candle {
-			symbol: Symbol::new(base, quote, "bybit"),
-			timestamp: DateTime::from_timestamp_millis(kline.start)?,
-			open: kline.open.parse().ok()?,
-			high: kline.high.parse().ok()?,
-			low: kline.low.parse().ok()?,
-			close: kline.close.parse().ok()?,
-			volume: kline.volume.parse().ok()?,
-			interval: interval_str.to_string(),
-		})
-	}
 }
 
 #[async_trait]
@@ -96,14 +57,12 @@ impl Exchange for BybitExchange {
 
 		let (mut write, read) = ws_stream.split();
 
-		// Subscribe to ticker topics
 		let mut topics = Vec::new();
 		for symbol in symbols {
 			let symbol_str = symbol.exchange_symbol();
 			topics.push(format!("tickers.{symbol_str}"));
 		}
 
-		// Send subscription message
 		let subscribe_msg = serde_json::json!({
 			"op": "subscribe",
 			"args": topics
@@ -117,16 +76,14 @@ impl Exchange for BybitExchange {
 		let message_stream = read.filter_map(|msg| async move {
 			match msg {
 				Ok(Message::Text(text)) => {
-					match serde_json::from_str::<Value>(&text) {
-						Ok(json) => {
-							// Check if it's a subscription confirmation
-							if json.get("op").and_then(|o| o.as_str()) == Some("subscribe") {
+						match serde_json::from_str::<Value>(&text) {
+							Ok(json) => {
+								if json.get("op").and_then(|o| o.as_str()) == Some("subscribe") {
 								tracing::info!("Bybit price subscription confirmed");
-								return None;
-							}
+									return None;
+								}
 
-							// Check if it's a ticker update
-							if let Some(topic) = json.get("topic").and_then(|t| t.as_str()) {
+								if let Some(topic) = json.get("topic").and_then(|t| t.as_str()) {
 								if topic.starts_with("tickers.") {
 									if let Some(data) = json.get("data") {
 										if let Some(data_array) = data.as_array() {
@@ -144,12 +101,11 @@ impl Exchange for BybitExchange {
 																		.and_then(|v| v.as_str())
 																		.and_then(|v| v.parse::<f64>().ok())
 																		.unwrap_or(0.0),
-																	price_change_24h_pct: ticker_data
-																		.get("price24hPcnt")
-																		.and_then(|p| p.as_str())
-																		.and_then(|p| p.parse::<f64>().ok())
-																		.map(|p| p * 100.0)
-																		.unwrap_or(0.0),
+													price_change_24h_pct: ticker_data
+														.get("price24hPcnt")
+														.and_then(|p| p.as_str())
+														.and_then(|p| p.parse::<f64>().ok())
+														.map_or(0.0, |p| p * 100.0),
 																};
 																return Some(ExchangeMessage::Ticker(ticker));
 															}
@@ -184,87 +140,9 @@ impl Exchange for BybitExchange {
 		Ok(Box::pin(message_stream))
 	}
 
-	async fn stream_candles(&self, symbols: &[Symbol], intervals: &[&str]) -> Result<MessageStream> {
-		if symbols.is_empty() {
-			return Ok(Box::pin(stream::empty()));
-		}
-
-		let (ws_stream, _) = connect_async(&self.config.ws_url).await.context("Failed to connect to Bybit WebSocket")?;
-
-		let (mut write, read) = ws_stream.split();
-
-		// Subscribe to kline topics
-		let mut topics = Vec::new();
-		for symbol in symbols {
-			for interval in intervals {
-				let interval_num = match *interval {
-					"1m" => "1",
-					"5m" => "5",
-					"15m" => "15",
-					"1h" => "60",
-					"4h" => "240",
-					_ => interval,
-				};
-				let symbol_str = symbol.exchange_symbol();
-				topics.push(format!("kline.{interval_num}.{symbol_str}"));
-			}
-		}
-
-		// Send subscription message
-		let subscribe_msg = serde_json::json!({
-			"op": "subscribe",
-			"args": topics
-		});
-
-		write
-			.send(Message::Text(subscribe_msg.to_string().into()))
-			.await
-			.context("Failed to send Bybit subscription message")?;
-
-		let message_stream = read.filter_map(|msg| async move {
-			match msg {
-				Ok(Message::Text(text)) => {
-					match serde_json::from_str::<Value>(&text) {
-						Ok(json) => {
-							// Check if it's a subscription confirmation
-							if json.get("op").and_then(|o| o.as_str()) == Some("subscribe") {
-								tracing::info!("Bybit subscription confirmed");
-								return None;
-							}
-
-							// Check if it's a kline update
-							if json.get("topic").is_some() {
-								if let Some(candle) = Self::parse_kline_message(&json) {
-									return Some(ExchangeMessage::Candle(candle));
-								}
-							}
-							None
-						},
-						Err(e) => {
-							tracing::warn!("Failed to parse Bybit message: {}", e);
-							Some(ExchangeMessage::Error(format!("Parse error: {e}")))
-						},
-					}
-				},
-				Ok(Message::Close(_)) => {
-					tracing::info!("Bybit WebSocket closed");
-					Some(ExchangeMessage::Error("Connection closed".to_string()))
-				},
-				Err(e) => {
-					tracing::error!("Bybit WebSocket error: {}", e);
-					Some(ExchangeMessage::Error(format!("WebSocket error: {e}")))
-				},
-				_ => None,
-			}
-		});
-
-		Ok(Box::pin(message_stream))
-	}
-
 	async fn fetch_derivatives_metrics(&self, symbol: &Symbol) -> Result<DerivativesMetrics> {
 		let symbol_str = symbol.exchange_symbol();
 
-		// Fetch Open Interest
 		let oi_url = format!(
 			"{}/v5/market/open-interest?category=linear&symbol={}&intervalTime=5min",
 			self.config.api_url, symbol_str
@@ -275,7 +153,6 @@ impl Exchange for BybitExchange {
 			anyhow::bail!("Bybit OI API error: {}", oi_response.ret_msg);
 		}
 
-		// Fetch Funding Rate
 		let funding_url = format!("{}/v5/market/tickers?category=linear&symbol={}", self.config.api_url, symbol_str);
 		let funding_response: TickerResponse = self.client.get(&funding_url).send().await?.json().await?;
 
@@ -283,12 +160,10 @@ impl Exchange for BybitExchange {
 			anyhow::bail!("Bybit funding API error: {}", funding_response.ret_msg);
 		}
 
-		// Fetch Long/Short Ratio
 		let ratio_url =
 			format!("{}/v5/market/account-ratio?category=linear&symbol={}&period=5min", self.config.api_url, symbol_str);
 		let ratio_response: LongShortRatioResponse =
 			self.client.get(&ratio_url).send().await?.json().await.unwrap_or_else(|_| {
-				// If ratio endpoint fails, create a default response
 				LongShortRatioResponse { ret_code: 0, ret_msg: String::new(), result: LongShortRatioResult { list: vec![] } }
 			});
 
@@ -305,10 +180,10 @@ impl Exchange for BybitExchange {
 			let sell_ratio = r.sell_ratio.parse::<f64>().unwrap_or(0.5);
 
 			LongShortRatio {
-				long_account_pct: buy_ratio * 100.0,
-				short_account_pct: sell_ratio * 100.0,
-				long_position_pct: buy_ratio * 100.0,
-				short_position_pct: sell_ratio * 100.0,
+				account_long: buy_ratio * 100.0,
+				account_short: sell_ratio * 100.0,
+				position_long: buy_ratio * 100.0,
+				position_short: sell_ratio * 100.0,
 			}
 		});
 
@@ -357,7 +232,6 @@ impl Exchange for BybitExchange {
 	}
 }
 
-// Helper function to parse Bybit symbols
 fn parse_bybit_symbol(symbol: &str) -> Option<(String, String)> {
 	let symbol_upper = symbol.to_uppercase();
 	if symbol_upper.ends_with("USDT") {
@@ -367,7 +241,6 @@ fn parse_bybit_symbol(symbol: &str) -> Option<(String, String)> {
 	None
 }
 
-// Bybit API Response Types
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InstrumentsResponse {
@@ -472,22 +345,4 @@ struct KlineResult {
 	list: Vec<KlineData>,
 }
 
-// Kline data: [timestamp, open, high, low, close, volume, turnover]
 type KlineData = (String, String, String, String, String, String, String);
-
-// Bybit WebSocket Kline Data
-#[derive(Debug, Deserialize)]
-struct BybitKlineData {
-	/// Kline start timestamp
-	pub start: i64,
-	/// Open price
-	pub open: String,
-	/// High price
-	pub high: String,
-	/// Low price
-	pub low: String,
-	/// Close price
-	pub close: String,
-	/// Volume
-	pub volume: String,
-}

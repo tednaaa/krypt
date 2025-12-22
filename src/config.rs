@@ -37,6 +37,7 @@ pub struct DerivativesConfig {
 	pub min_funding_rate: f64,
 	pub min_long_ratio: f64,
 	pub min_oi_increase_pct: f64,
+	#[allow(dead_code)]
 	pub poll_interval_secs: u64,
 }
 

@@ -1,5 +1,5 @@
 use crate::config::TelegramConfig;
-use crate::pump_scanner::{PumpCandidate, QualificationResult};
+use crate::pump_scanner::{PumpCandidate, SignalAnalysis};
 use anyhow::{Context, Result};
 use teloxide::{
 	prelude::*,
@@ -7,28 +7,24 @@ use teloxide::{
 };
 use tracing::{error, info};
 
-/// Telegram bot for posting pump alerts to a channel
 pub struct TelegramBot {
 	bot: Bot,
 	config: TelegramConfig,
 }
 
 impl TelegramBot {
-	/// Creates a new Telegram bot instance
 	pub fn new(config: TelegramConfig) -> Self {
 		let bot = Bot::new(&config.bot_token);
 		Self { bot, config }
 	}
 
-	/// Posts a pump alert to the configured channel
-	pub async fn post_alert(&self, candidate: &PumpCandidate, qualification: &QualificationResult) -> Result<()> {
-		let message = self.format_alert_message(candidate, qualification);
+	pub async fn post_alert(&self, candidate: &PumpCandidate, analysis: &SignalAnalysis) -> Result<()> {
+		let message = self.format_alert_message(candidate, analysis);
 
 		let chat_id = self.config.chat_id.parse::<i64>().context("Invalid chat_id format")?;
 
 		let mut request = self.bot.send_message(ChatId(chat_id), message).parse_mode(ParseMode::Html);
 
-		// Add topic ID if configured
 		if let Some(ref topic_id) = self.config.pump_screener_topic_id {
 			if !topic_id.is_empty() {
 				if let Ok(thread_id) = topic_id.parse::<i32>() {
@@ -41,6 +37,7 @@ impl TelegramBot {
 			Ok(_) => {
 				info!(
 					symbol = %candidate.symbol,
+					score = analysis.total_score,
 					"Alert posted to Telegram"
 				);
 				Ok(())
@@ -56,68 +53,104 @@ impl TelegramBot {
 		}
 	}
 
-	/// Formats the alert message according to specification
-	fn format_alert_message(&self, candidate: &PumpCandidate, qualification: &QualificationResult) -> String {
+	fn format_alert_message(&self, candidate: &PumpCandidate, analysis: &SignalAnalysis) -> String {
 		let symbol_display = format!("{}/{}", candidate.symbol.base, candidate.symbol.quote);
 		let price = candidate.current_price;
 		let change_pct = candidate.price_change.change_pct;
 		let time_mins = candidate.price_change.time_elapsed_mins;
-		let volume_ratio = candidate.volume_ratio;
 
-		// Format derivatives data
-		let derivatives = &qualification.derivatives_details;
-		let oi_str = derivatives
-			.oi_increase_pct
-			.map_or_else(|| "Open Interest: N/A".to_string(), |v| format!("Open Interest: +{v:.1}%"));
-
-		let funding_str =
-			derivatives.funding_rate.map_or_else(|| "Funding: N/A".to_string(), |v| format!("Funding: {:.3}%", v * 100.0));
-
-		let ls_ratio_str = derivatives.long_ratio.map_or_else(
-			|| "Long / Short: N/A".to_string(),
-			|r| {
-				let long_pct = r * 100.0;
-				let short_pct = (1.0 - r) * 100.0;
-				format!("Long / Short: {long_pct:.0}% / {short_pct:.0}%")
+		let oi_str = analysis.open_interest.increase_pct.map_or_else(
+			|| {
+				analysis
+					.open_interest
+					.value
+					.map_or_else(|| "Open Interest: N/A".to_string(), |value| format!("Open Interest: {value:.2}"))
+			},
+			|increase| {
+				format!(
+					"Open Interest: +{increase:.1}%{}",
+					if analysis.open_interest.is_overheated { " ✅ +1 for short" } else { "" }
+				)
 			},
 		);
 
-		// Format technical context
-		let technical_context = qualification.technical_context();
-		let technical_str = if technical_context.is_empty() {
-			"• No specific technical signals".to_string()
+		let funding_str = analysis.funding_rate.value.map_or_else(
+			|| "Funding Rate: N/A".to_string(),
+			|rate| {
+				format!(
+					"Funding Rate: {:.3}%{}",
+					rate * 100.0,
+					if analysis.funding_rate.is_overheated { " ✅ +1 for short" } else { "" }
+				)
+			},
+		);
+
+		let ls_str = if let (Some(long), Some(short)) = (analysis.long_short_ratio.long_pct, analysis.long_short_ratio.short_pct) {
+			format!(
+				"Longs: {:.0}% - Shorts: {:.0}%{}",
+				long,
+				short,
+				if analysis.long_short_ratio.is_overheated { " ✅ +1 for short" } else { "" }
+			)
 		} else {
-			technical_context.join("\n")
+			"Longs/Shorts: N/A".to_string()
 		};
 
-		// Build Coinglass URL
+		let volume_str = format!(
+			"Volume: {:.1}x{}",
+			analysis.volume.ratio,
+			if analysis.volume.is_significant { " ✅ significant" } else { "" }
+		);
+
+		let ema_str = analysis.ema_status.ema50_distance.map_or_else(
+			|| "EMA: N/A".to_string(),
+			|ema50| {
+				let mut parts = vec![format!("EMA50: +{ema50:.1}%")];
+				if let Some(ema200) = analysis.ema_status.ema200_distance {
+					parts.push(format!("EMA200: +{ema200:.1}%"));
+				}
+				if analysis.ema_status.is_extended {
+					parts.push("✅ +1 for short".to_string());
+				}
+				format!("EMA: {}", parts.join(", "))
+			},
+		);
+
+		let pivot_str = analysis.pivot_status.level.as_ref().map_or_else(
+			|| "Pivot: N/A".to_string(),
+			|level| {
+				format!(
+					"Pivot: {level}{}",
+					if analysis.pivot_status.is_near_resistance { " ✅ +1 for short" } else { "" }
+				)
+			},
+		);
+
 		let coinglass_url = format!("https://www.coinglass.com/tv/{}{}", candidate.symbol.base, candidate.symbol.quote);
 
-		// Format the complete message
 		format!(
 			"🚨 <b>PUMP DETECTED — {symbol_display}</b>\n\
 			\n\
 			<b>Price:</b> {price:.2} USDT (+{change_pct:.1}% in {time_mins}m)\n\
-			<b>Volume:</b> x{volume_ratio:.1} vs average\n\
+			<b>Short Score:</b> {}/6 ⭐️\n\
 			\n\
 			{oi_str}\n\
 			{funding_str}\n\
-			{ls_ratio_str}\n\
+			{ls_str}\n\
+			{volume_str}\n\
+			{ema_str}\n\
+			{pivot_str}\n\
 			\n\
-			📍 <b>Technical context:</b>\n\
-			{technical_str}\n\
-			\n\
-			🔗 <a href=\"{coinglass_url}\">Coinglass</a>"
+			🔗 <a href=\"{coinglass_url}\">Coinglass</a>",
+			analysis.total_score
 		)
 	}
 
-	/// Tests the bot connection by sending a test message
 	pub async fn test_connection(&self) -> Result<()> {
 		let chat_id = self.config.chat_id.parse::<i64>().context("Invalid chat_id format")?;
 
 		let mut request = self.bot.send_message(ChatId(chat_id), "🤖 Pump Scanner Bot initialized");
 
-		// Add topic ID if configured
 		if let Some(ref topic_id) = self.config.pump_screener_topic_id {
 			if !topic_id.is_empty() {
 				if let Ok(thread_id) = topic_id.parse::<i32>() {
@@ -151,10 +184,8 @@ fn format_price(price: f64) -> String {
 mod tests {
 	use super::*;
 	use crate::exchange::Symbol;
-	use crate::pump_scanner::qualifier::{DerivativesResult, MomentumStatus, TechnicalResult};
+	use crate::pump_scanner::detector::PumpCandidate;
 	use crate::pump_scanner::tracker::PriceChange;
-	use crate::pump_scanner::QualificationResult;
-	use chrono::Utc;
 
 	#[test]
 	fn test_format_price() {
@@ -167,6 +198,8 @@ mod tests {
 
 	#[test]
 	fn test_alert_message_format() {
+		use crate::pump_scanner::analysis::*;
+
 		let config = TelegramConfig {
 			bot_token: "test_token".to_string(),
 			chat_id: "123456".to_string(),
@@ -180,48 +213,34 @@ mod tests {
 			symbol: Symbol::new("BTC", "USDT", "binance"),
 			price_change: PriceChange {
 				start_price: 50000.0,
-				end_price: 52500.0,
 				change_pct: 5.0,
 				time_elapsed_mins: 10,
-				start_time: Utc::now(),
-				end_time: Utc::now(),
 			},
 			volume_ratio: 3.1,
 			current_price: 52500.0,
 		};
 
-		let qualification = QualificationResult {
-			qualified: true,
-			score: 3,
-			conditions_met: vec!["OI increased 11%".to_string(), "Funding rate 0.0310".to_string()],
-			conditions_failed: vec![],
-			derivatives_details: DerivativesResult {
-				conditions_met: vec![],
-				conditions_failed: vec![],
-				oi_increase_pct: Some(11.0),
-				funding_rate: Some(0.031),
-				long_ratio: Some(0.71),
-			},
-			technical_details: TechnicalResult {
-				conditions_met: vec!["Price above EMA50".to_string()],
-				conditions_failed: vec![],
-				ema_extended: true,
-				near_pivot_resistance: Some("R1".to_string()),
-				momentum_status: MomentumStatus::Slowing("deceleration detected".to_string()),
-			},
+		let analysis = SignalAnalysis {
+			open_interest: OpenInterestSignal { value: Some(1_000_000.0), increase_pct: Some(11.0), is_overheated: true },
+			funding_rate: FundingRateSignal { value: Some(0.031), is_overheated: true },
+			long_short_ratio: LongShortSignal { long_pct: Some(71.0), short_pct: Some(29.0), is_overheated: true },
+			volume: VolumeSignal { ratio: 3.1, is_significant: true },
+			ema_status: EmaSignal { ema50_distance: Some(2.5), ema200_distance: Some(5.1), is_extended: true },
+			pivot_status: PivotSignal { level: Some("R1".to_string()), is_near_resistance: true },
+			total_score: 6,
 		};
 
-		let message = bot.format_alert_message(&candidate, &qualification);
+		let message = bot.format_alert_message(&candidate, &analysis);
 
 		// Verify key components are in the message
-		assert!(message.contains("PUMP DETECTED — BTC/USDT"));
-		assert!(message.contains("52500.00 USDT"));
-		assert!(message.contains("+5.0% in 10m"));
-		assert!(message.contains("x3.1 vs average"));
-		assert!(message.contains("Open Interest: +11.0%"));
-		assert!(message.contains("Funding: 3.100%"));
-		assert!(message.contains("Long / Short: 71% / 29%"));
-		assert!(message.contains("Technical context:"));
-		assert!(message.contains("Coinglass"));
+		assert!(message.contains("PUMP DETECTED — BTC/USDT"), "Missing PUMP DETECTED header");
+		assert!(message.contains("52500.00 USDT"), "Missing price");
+		assert!(message.contains("+5.0% in 10m"), "Missing price change");
+		assert!(message.contains("6/6"), "Missing score");
+		assert!(message.contains("Open Interest: +11.0%"), "Missing OI");
+		assert!(message.contains("Funding Rate: 3.100%"), "Missing funding");
+		assert!(message.contains("Longs: 71% - Shorts: 29%"), "Missing L/S ratio");
+		assert!(message.contains("Volume: 3.1x"), "Missing volume");
+		assert!(message.contains("Coinglass"), "Missing coinglass link");
 	}
 }
