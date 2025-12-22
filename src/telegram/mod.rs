@@ -103,33 +103,35 @@ impl TelegramBot {
 			if analysis.volume.is_significant { " ✅ significant" } else { "" }
 		);
 
-		let ema_str = if let Some(ema50) = analysis.ema_status.ema50_distance {
-			let ema50_sign = if ema50 >= 0.0 { "+" } else { "" };
-			let mut parts = vec![format!("EMA50: {ema50_sign}{ema50:.1}%")];
-			
-			if let Some(ema200) = analysis.ema_status.ema200_distance {
-				let ema200_sign = if ema200 >= 0.0 { "+" } else { "" };
-				parts.push(format!("EMA200: {ema200_sign}{ema200:.1}%"));
-			}
-			
-			if analysis.ema_status.is_extended {
-				parts.push("✅ extended (+1 for short)".to_string());
-			}
-			
-			parts.join(", ")
-		} else {
-			"N/A".to_string()
-		};
+		let ema_str = analysis.ema_status.ema50_distance.map_or_else(
+			|| "N/A".to_string(),
+			|ema50| {
+				let ema50_sign = if ema50 >= 0.0 { "+" } else { "" };
+				let mut parts = vec![format!("EMA50: {ema50_sign}{ema50:.1}%")];
 
-		let pivot_str = if let Some(ref level) = analysis.pivot_status.level {
-			if analysis.pivot_status.is_near_resistance {
-				format!("{level} ✅ at resistance (+1 for short)")
-			} else {
-				level.clone()
-			}
-		} else {
-			"N/A".to_string()
-		};
+				if let Some(ema200) = analysis.ema_status.ema200_distance {
+					let ema200_sign = if ema200 >= 0.0 { "+" } else { "" };
+					parts.push(format!("EMA200: {ema200_sign}{ema200:.1}%"));
+				}
+
+				if analysis.ema_status.is_extended {
+					parts.push("✅ extended (+1 for short)".to_string());
+				}
+
+				parts.join(", ")
+			},
+		);
+
+		let pivot_str = analysis.pivot_status.level.as_ref().map_or_else(
+			|| "N/A".to_string(),
+			|level| {
+				if analysis.pivot_status.is_near_resistance {
+					format!("{level} ✅ at resistance (+1 for short)")
+				} else {
+					level.clone()
+				}
+			},
+		);
 
 		let coinglass_url = format!("https://www.coinglass.com/tv/{}{}", candidate.symbol.base, candidate.symbol.quote);
 
