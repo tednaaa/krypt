@@ -4,7 +4,6 @@ use crate::exchange::Symbol;
 use chrono::Utc;
 use tracing::{debug, info};
 
-/// Detects pump events based on price movement and volume
 pub struct PumpDetector {
 	config: PumpConfig,
 }
@@ -14,22 +13,18 @@ impl PumpDetector {
 		Self { config }
 	}
 
-	/// Analyzes a symbol to detect pump candidates
 	pub fn analyze(&self, tracker: &mut SymbolTracker) -> Option<PumpCandidate> {
-		// Skip if already in pump state or recently alerted
 		match tracker.pump_state {
 			PumpState::Candidate { .. } | PumpState::Alerted { .. } => return None,
 			PumpState::Normal => {},
 		}
 
-		// Need enough price history
 		if tracker.price_history.len() < 10 {
 			return None;
 		}
 
 		let current_price = tracker.current_price()?;
 
-		// Check for pump in different time windows
 		for window_mins in self.config.min_window_mins..=self.config.max_window_mins {
 			let window_secs = window_mins * 60;
 
@@ -42,7 +37,6 @@ impl PumpDetector {
 						"Pump candidate detected"
 					);
 
-					// Update pump state
 					tracker.pump_state = PumpState::Candidate {
 						detected_at: Utc::now(),
 						entry_price: price_change.start_price,
@@ -63,9 +57,7 @@ impl PumpDetector {
 		None
 	}
 
-	/// Checks if price change qualifies as a pump trigger
 	fn is_pump_trigger(&self, price_change: &PriceChange, tracker: &SymbolTracker) -> bool {
-		// Check price threshold
 		if price_change.change_pct < self.config.price_threshold_pct {
 			debug!(
 				symbol = %tracker.symbol,
@@ -76,7 +68,6 @@ impl PumpDetector {
 			return false;
 		}
 
-		// Check time window
 		if price_change.time_elapsed_mins < self.config.min_window_mins
 			|| price_change.time_elapsed_mins > self.config.max_window_mins
 		{
@@ -119,21 +110,20 @@ impl PumpDetector {
 		true
 	}
 
-	/// Calculates volume ratio (current window vs baseline average)
 	fn calculate_volume_ratio(&self, tracker: &SymbolTracker, window_secs: u64) -> f64 {
 		tracker.volume_ratio_for_window(window_secs)
 	}
 
-	/// Updates pump candidate state if still active
 	pub fn update_candidate(&self, tracker: &mut SymbolTracker) {
 		if let PumpState::Candidate { detected_at, entry_price, max_price, total_volume } = tracker.pump_state {
 			if let Some(current_price) = tracker.current_price() {
-				// Update max price if new high
 				let new_max = max_price.max(current_price);
 
+				// TODO: move to fn
 				// Check if pump has faded (price dropped significantly from max)
 				let drop_from_max_pct = ((new_max - current_price) / new_max) * 100.0;
 
+				// TODO: move to fn
 				// Reset if pump has faded or too much time has passed
 				let elapsed_mins = (Utc::now() - detected_at).num_minutes();
 				if drop_from_max_pct > 3.0 || elapsed_mins > 30 {
@@ -165,15 +155,3 @@ pub struct PumpCandidate {
 	pub volume_ratio: f64,
 	pub current_price: f64,
 }
-
-impl PumpCandidate {
-	/// Returns a human-readable summary
-	#[allow(dead_code)]
-	pub fn summary(&self) -> String {
-		format!(
-			"{} pumped {:.2}% in {}m with {:.1}x volume",
-			self.symbol, self.price_change.change_pct, self.price_change.time_elapsed_mins, self.volume_ratio
-		)
-	}
-}
-
