@@ -74,40 +74,50 @@ impl Exchange for BinanceExchange {
 				anyhow::anyhow!("Failed to connect to Binance price WebSocket: {e}")
 			})?;
 
-			tracing::info!("Binance price WebSocket connection {} established. Response status: {:?}", i + 1, response.status());
+			tracing::info!(
+				"Binance price WebSocket connection {} established. Response status: {:?}",
+				i + 1,
+				response.status()
+			);
 
 			let (_write, read) = ws_stream.split();
 
 			let message_stream = read.filter_map(|msg| async move {
 				match msg {
-					Ok(Message::Text(text)) => {
-						match serde_json::from_str::<Value>(&text) {
-							Ok(json) => {
-								if let Some(data) = json.get("data") {
-									if let Some(stream_name) = json.get("stream").and_then(|s| s.as_str()) {
-										if let Some(symbol_part) = stream_name.split('@').next() {
-											if let Some((base, quote)) = parse_binance_symbol(symbol_part) {
-												if let Some(price) = data.get("c").and_then(|c| c.as_str()).and_then(|c| c.parse::<f64>().ok()) {
-													let ticker = Ticker {
-														symbol: Symbol::new(base, quote, "binance"),
-														timestamp: Utc::now(),
-														last_price: price,
-														volume_24h: data.get("v").and_then(|v| v.as_str()).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0),
-														price_change_24h_pct: data.get("P").and_then(|p| p.as_str()).and_then(|p| p.parse::<f64>().ok()).unwrap_or(0.0),
-													};
-													return Some(ExchangeMessage::Ticker(ticker));
-												}
+					Ok(Message::Text(text)) => match serde_json::from_str::<Value>(&text) {
+						Ok(json) => {
+							if let Some(data) = json.get("data") {
+								if let Some(stream_name) = json.get("stream").and_then(|s| s.as_str()) {
+									if let Some(symbol_part) = stream_name.split('@').next() {
+										if let Some((base, quote)) = parse_binance_symbol(symbol_part) {
+											if let Some(price) = data.get("c").and_then(|c| c.as_str()).and_then(|c| c.parse::<f64>().ok()) {
+												let ticker = Ticker {
+													symbol: Symbol::new(base, quote, "binance"),
+													timestamp: Utc::now(),
+													last_price: price,
+													volume_24h: data
+														.get("v")
+														.and_then(|v| v.as_str())
+														.and_then(|v| v.parse::<f64>().ok())
+														.unwrap_or(0.0),
+													price_change_24h_pct: data
+														.get("P")
+														.and_then(|p| p.as_str())
+														.and_then(|p| p.parse::<f64>().ok())
+														.unwrap_or(0.0),
+												};
+												return Some(ExchangeMessage::Ticker(ticker));
 											}
 										}
 									}
 								}
-								None
-							},
-							Err(e) => {
-								tracing::warn!("Failed to parse Binance price message: {}", e);
-								Some(ExchangeMessage::Error(format!("Parse error: {e}")))
-							},
-						}
+							}
+							None
+						},
+						Err(e) => {
+							tracing::warn!("Failed to parse Binance price message: {}", e);
+							Some(ExchangeMessage::Error(format!("Parse error: {e}")))
+						},
 					},
 					Ok(Message::Close(_)) => {
 						tracing::info!("Binance price WebSocket closed");

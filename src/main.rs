@@ -437,4 +437,3 @@ async fn process_price_update(params: PriceUpdateParams<'_>) {
 		}
 	}
 }
-

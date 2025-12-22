@@ -13,12 +13,7 @@ pub struct Ema {
 
 impl Ema {
 	pub fn new(period: usize) -> Self {
-		Self {
-			period,
-			current_value: None,
-			is_initialized: false,
-			price_buffer: VecDeque::with_capacity(period),
-		}
+		Self { period, current_value: None, is_initialized: false, price_buffer: VecDeque::with_capacity(period) }
 	}
 
 	#[allow(dead_code)]

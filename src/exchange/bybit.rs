@@ -71,40 +71,38 @@ impl Exchange for BybitExchange {
 
 		let message_stream = read.filter_map(|msg| async move {
 			match msg {
-				Ok(Message::Text(text)) => {
-						match serde_json::from_str::<Value>(&text) {
-							Ok(json) => {
-								if json.get("op").and_then(|o| o.as_str()) == Some("subscribe") {
-								tracing::info!("Bybit price subscription confirmed");
-									return None;
-								}
+				Ok(Message::Text(text)) => match serde_json::from_str::<Value>(&text) {
+					Ok(json) => {
+						if json.get("op").and_then(|o| o.as_str()) == Some("subscribe") {
+							tracing::info!("Bybit price subscription confirmed");
+							return None;
+						}
 
-								if let Some(topic) = json.get("topic").and_then(|t| t.as_str()) {
-								if topic.starts_with("tickers.") {
-									if let Some(data) = json.get("data") {
-										if let Some(data_array) = data.as_array() {
-											if let Some(ticker_data) = data_array.first() {
-												if let Some(symbol_str) = topic.strip_prefix("tickers.") {
-													if let Some((base, quote)) = parse_bybit_symbol(symbol_str) {
-														if let Some(last_price_str) = ticker_data.get("lastPrice").and_then(|p| p.as_str()) {
-															if let Ok(price) = last_price_str.parse::<f64>() {
-																let ticker = Ticker {
-																	symbol: Symbol::new(base, quote, "bybit"),
-																	timestamp: Utc::now(),
-																	last_price: price,
-																	volume_24h: ticker_data
-																		.get("volume24h")
-																		.and_then(|v| v.as_str())
-																		.and_then(|v| v.parse::<f64>().ok())
-																		.unwrap_or(0.0),
-													price_change_24h_pct: ticker_data
-														.get("price24hPcnt")
-														.and_then(|p| p.as_str())
-														.and_then(|p| p.parse::<f64>().ok())
-														.map_or(0.0, |p| p * 100.0),
-																};
-																return Some(ExchangeMessage::Ticker(ticker));
-															}
+						if let Some(topic) = json.get("topic").and_then(|t| t.as_str()) {
+							if topic.starts_with("tickers.") {
+								if let Some(data) = json.get("data") {
+									if let Some(data_array) = data.as_array() {
+										if let Some(ticker_data) = data_array.first() {
+											if let Some(symbol_str) = topic.strip_prefix("tickers.") {
+												if let Some((base, quote)) = parse_bybit_symbol(symbol_str) {
+													if let Some(last_price_str) = ticker_data.get("lastPrice").and_then(|p| p.as_str()) {
+														if let Ok(price) = last_price_str.parse::<f64>() {
+															let ticker = Ticker {
+																symbol: Symbol::new(base, quote, "bybit"),
+																timestamp: Utc::now(),
+																last_price: price,
+																volume_24h: ticker_data
+																	.get("volume24h")
+																	.and_then(|v| v.as_str())
+																	.and_then(|v| v.parse::<f64>().ok())
+																	.unwrap_or(0.0),
+																price_change_24h_pct: ticker_data
+																	.get("price24hPcnt")
+																	.and_then(|p| p.as_str())
+																	.and_then(|p| p.parse::<f64>().ok())
+																	.map_or(0.0, |p| p * 100.0),
+															};
+															return Some(ExchangeMessage::Ticker(ticker));
 														}
 													}
 												}
@@ -113,13 +111,13 @@ impl Exchange for BybitExchange {
 									}
 								}
 							}
-							None
-						},
-						Err(e) => {
-							tracing::warn!("Failed to parse Bybit price message: {}", e);
-							Some(ExchangeMessage::Error(format!("Parse error: {e}")))
-						},
-					}
+						}
+						None
+					},
+					Err(e) => {
+						tracing::warn!("Failed to parse Bybit price message: {}", e);
+						Some(ExchangeMessage::Error(format!("Parse error: {e}")))
+					},
 				},
 				Ok(Message::Close(_)) => {
 					tracing::info!("Bybit price WebSocket closed");
@@ -159,8 +157,10 @@ impl Exchange for BybitExchange {
 		let ratio_url =
 			format!("{}/v5/market/account-ratio?category=linear&symbol={}&period=5min", self.config.api_url, symbol_str);
 		let ratio_response: LongShortRatioResponse =
-			self.client.get(&ratio_url).send().await?.json().await.unwrap_or_else(|_| {
-				LongShortRatioResponse { ret_code: 0, ret_msg: String::new(), result: LongShortRatioResult { list: vec![] } }
+			self.client.get(&ratio_url).send().await?.json().await.unwrap_or_else(|_| LongShortRatioResponse {
+				ret_code: 0,
+				ret_msg: String::new(),
+				result: LongShortRatioResult { list: vec![] },
 			});
 
 		let oi_data = oi_response.result.list.first();

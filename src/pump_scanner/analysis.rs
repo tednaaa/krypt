@@ -113,7 +113,8 @@ impl SignalAnalysis {
 	fn analyze_long_short_ratio(tracker: &SymbolTracker, config: &DerivativesConfig) -> LongShortSignal {
 		let long_ratio = tracker.long_ratio();
 
-		let (long_pct, short_pct) = long_ratio.map_or((None, None), |ratio| (Some(ratio * 100.0), Some((1.0 - ratio) * 100.0)));
+		let (long_pct, short_pct) =
+			long_ratio.map_or((None, None), |ratio| (Some(ratio * 100.0), Some((1.0 - ratio) * 100.0)));
 
 		let is_overheated = long_ratio.is_some_and(|ratio| ratio >= config.min_long_ratio);
 
@@ -134,11 +135,7 @@ impl SignalAnalysis {
 
 		let ema200_distance = tracker.ema_1m.get(200).map(|ema| ((current_price - ema) / ema) * 100.0);
 
-		let is_extended = if config.ema_extension {
-			tracker.is_ema_extended(current_price, &[50, 200])
-		} else {
-			false
-		};
+		let is_extended = if config.ema_extension { tracker.is_ema_extended(current_price, &[50, 200]) } else { false };
 
 		EmaSignal { ema50_distance, ema200_distance, is_extended }
 	}
