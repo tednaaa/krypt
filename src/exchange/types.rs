@@ -13,16 +13,10 @@ impl Symbol {
 		Self { base: base.into(), quote: quote.into(), exchange: exchange.into() }
 	}
 
-	#[allow(dead_code)]
-	pub fn pair(&self) -> String {
-		format!("{}/{}", self.base, self.quote)
-	}
-
 	pub fn exchange_symbol(&self) -> String {
 		format!("{}{}", self.base, self.quote)
 	}
 
-	/// Check if symbol is valid (ASCII only, no special characters)
 	pub fn is_valid(&self) -> bool {
 		self.base.chars().all(|c| c.is_ascii_alphanumeric())
 			&& self.quote.chars().all(|c| c.is_ascii_alphanumeric())
@@ -49,29 +43,6 @@ pub struct Candle {
 	pub interval: String,
 }
 
-impl Candle {
-	#[allow(dead_code)]
-	pub fn typical_price(&self) -> f64 {
-		(self.high + self.low + self.close) / 3.0
-	}
-
-	#[allow(dead_code)]
-	pub fn range_pct(&self) -> f64 {
-		if self.low > 0.0 {
-			((self.high - self.low) / self.low) * 100.0
-		} else {
-			0.0
-		}
-	}
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MarkPrice {
-	pub symbol: Symbol,
-	pub timestamp: DateTime<Utc>,
-	pub price: f64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DerivativesMetrics {
 	pub symbol: Symbol,
@@ -83,22 +54,16 @@ pub struct DerivativesMetrics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(clippy::struct_field_names)]
 pub struct LongShortRatio {
-	pub long_account_pct: f64,
-	pub short_account_pct: f64,
-	pub long_position_pct: f64,
-	pub short_position_pct: f64,
+	pub account_long: f64,
+	pub account_short: f64,
+	pub position_long: f64,
+	pub position_short: f64,
 }
 
 impl LongShortRatio {
 	pub fn account_ratio(&self) -> f64 {
-		self.long_account_pct / (self.long_account_pct + self.short_account_pct)
-	}
-
-	#[allow(dead_code)]
-	pub fn position_ratio(&self) -> f64 {
-		self.long_position_pct / (self.long_position_pct + self.short_position_pct)
+		self.account_long / (self.account_long + self.account_short)
 	}
 }
 
@@ -111,21 +76,8 @@ pub struct Ticker {
 	pub price_change_24h_pct: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct PriceSnapshot {
-	pub symbol: Symbol,
-	pub timestamp: DateTime<Utc>,
-	pub price: f64,
-	pub volume: f64,
-}
-
 #[derive(Debug, Clone)]
 pub enum ExchangeMessage {
-	Candle(Candle),
-	#[allow(dead_code)]
-	MarkPrice(MarkPrice),
-	#[allow(dead_code)]
 	Ticker(Ticker),
 	Error(String),
 }

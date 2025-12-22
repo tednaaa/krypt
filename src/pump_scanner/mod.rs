@@ -1,7 +1,7 @@
+pub mod analysis;
 pub mod detector;
-pub mod qualifier;
 pub mod tracker;
 
+pub use analysis::SignalAnalysis;
 pub use detector::{PumpCandidate, PumpDetector};
-pub use qualifier::{OverheatingQualifier, QualificationResult};
 pub use tracker::TrackerManager;
