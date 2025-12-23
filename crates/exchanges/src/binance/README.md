@@ -14,3 +14,6 @@
 - [Long/Short Ratio](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Long-Short-Ratio)
 - [Taker Buy/Sell Volume](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Taker-BuySell-Volume)
 - [Basis - difference between spot & future](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Basis)
+
+- To get futures/spot CVD
+- [Compressed/Aggregate Trades List](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Compressed-Aggregate-Trades-List#http-request)
