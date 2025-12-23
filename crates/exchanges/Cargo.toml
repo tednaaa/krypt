@@ -10,3 +10,6 @@ workspace = true
 [dependencies]
 serde.workspace = true
 anyhow.workspace = true
+reqwest.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
