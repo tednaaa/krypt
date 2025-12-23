@@ -135,6 +135,8 @@ dependencies = [
  "reqwest",
  "serde",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

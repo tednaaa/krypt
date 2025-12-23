@@ -1,5 +1,7 @@
 use crate::{Exchange, utils::calculate_percent_change};
+use anyhow::Context;
 use api_schemes::{FundingRateHistoryResponse, FundingRateInfoResponse, OpenInterestStatisticsResponse};
+use tracing::{debug, error, warn};
 mod api_schemes;
 
 const BINANCE_FUTURES_API_BASE: &str = "https://fapi.binance.com";
@@ -82,33 +84,88 @@ impl Exchange for BinanceExchange {
 			"{BINANCE_FUTURES_API_BASE}/futures/data/openInterestHist?symbol={symbol}&period=1d&limit=35&startTime={thirty_days_ago}"
 		);
 
+		debug!("Fetching open interest data for {symbol}: 5m={url_5m}, 1h={url_1h}, 1d={url_1d}");
+
 		let (data_5m, data_1h, data_1d): (
 			Vec<OpenInterestStatisticsResponse>,
 			Vec<OpenInterestStatisticsResponse>,
 			Vec<OpenInterestStatisticsResponse>,
-		) = tokio::try_join!(
+		) = match tokio::try_join!(
 			fetch_json(&self.client, &url_5m),
 			fetch_json(&self.client, &url_1h),
 			fetch_json(&self.client, &url_1d)
-		)?;
+		) {
+			Ok(data) => {
+				debug!("Received data: 5m={} entries, 1h={} entries, 1d={} entries", data.0.len(), data.1.len(), data.2.len());
+				data
+			},
+			Err(e) => {
+				error!("Failed to fetch open interest data for {symbol}: {e:?}");
+				return Err(e.context("Failed to fetch open interest data from Binance API"));
+			},
+		};
 
-		let current_oi = data_5m
-			.last()
-			.ok_or_else(|| anyhow::anyhow!("No current open interest data for symbol '{symbol}'"))?
-			.sum_open_interest
-			.parse::<f64>()?;
+		if data_5m.is_empty() {
+			warn!("No 5-minute open interest data returned for {symbol}");
+			anyhow::bail!("No 5-minute open interest data available for symbol '{symbol}'");
+		}
+
+		let current_oi = match data_5m.last() {
+			Some(entry) => {
+				debug!("Last 5m entry: timestamp={}, sum_open_interest={}", entry.timestamp, entry.sum_open_interest);
+				entry
+					.sum_open_interest
+					.parse::<f64>()
+					.with_context(|| format!("Failed to parse sum_open_interest '{}' as f64", entry.sum_open_interest))?
+			},
+			None => {
+				error!("data_5m array is empty but passed is_empty() check - this should not happen");
+				anyhow::bail!("No current open interest data for symbol '{symbol}'");
+			},
+		};
+
+		debug!("Current open interest: {current_oi}");
 
 		let oi_15m = find_oi_at_time(&data_5m, fifteen_min_ago, current_oi);
+		debug!("Open interest 15min ago: {oi_15m} (target_time={fifteen_min_ago})");
 
 		let combined_short_term: Vec<_> = data_5m.iter().chain(data_1h.iter()).collect();
 		let oi_1h = combined_short_term
 			.iter()
 			.find(|d| parse_timestamp(&d.timestamp).unwrap_or(0) <= one_hour_ago)
-			.and_then(|d| parse_rate(&d.sum_open_interest).ok())
-			.unwrap_or(current_oi);
+			.and_then(|d| match parse_rate(&d.sum_open_interest) {
+				Ok(rate) => Some(rate),
+				Err(e) => {
+					warn!("Failed to parse sum_open_interest '{}' for 1h data: {}", d.sum_open_interest, e);
+					None
+				},
+			})
+			.unwrap_or_else(|| {
+				warn!("No 1h open interest data found, using current_oi as fallback");
+				current_oi
+			});
+		debug!("Open interest 1h ago: {oi_1h} (target_time={one_hour_ago})");
 
 		let oi_4h = find_oi_at_time(&data_1h, four_hours_ago, current_oi);
-		let oi_30d = data_1d.first().and_then(|d| parse_rate(&d.sum_open_interest).ok()).unwrap_or(current_oi);
+		debug!("Open interest 4h ago: {oi_4h} (target_time={four_hours_ago})");
+
+		let oi_30d = data_1d
+			.first()
+			.and_then(|d| match parse_rate(&d.sum_open_interest) {
+				Ok(rate) => {
+					debug!("30d open interest from first entry: timestamp={}, oi={rate}", d.timestamp);
+					Some(rate)
+				},
+				Err(e) => {
+					warn!("Failed to parse sum_open_interest '{}' for 30d data: {}", d.sum_open_interest, e);
+					None
+				},
+			})
+			.unwrap_or_else(|| {
+				warn!("No 30d open interest data found, using current_oi as fallback");
+				current_oi
+			});
+		debug!("Open interest 30d ago: {oi_30d}");
 
 		Ok(crate::OpenInterestInfo {
 			open_interest_percent_change_15_minutes: calculate_percent_change(oi_15m, current_oi),
@@ -123,27 +180,32 @@ fn now_ms() -> anyhow::Result<i64> {
 	Ok(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis() as i64)
 }
 
-/// Calculate timestamp for N milliseconds ago
 fn ms_ago(ms: i64) -> anyhow::Result<i64> {
 	Ok(now_ms()? - ms)
 }
 
-/// Fetch JSON from a URL with proper error handling
 async fn fetch_json<T: serde::de::DeserializeOwned>(client: &reqwest::Client, url: &str) -> anyhow::Result<T> {
-	client.get(url).send().await?.error_for_status()?.json().await.map_err(Into::into)
+	debug!("Fetching: {url}");
+	let response = client.get(url).send().await.with_context(|| format!("Network error while fetching {url}"))?;
+
+	let status = response.status();
+	if !status.is_success() {
+		let error_text = response.text().await.unwrap_or_else(|_| "Unable to read error response".to_string());
+		error!("HTTP error {} for {}: {}", status, url, error_text);
+		anyhow::bail!("HTTP {} error from {}: {}", status, url, error_text);
+	}
+
+	response.json().await.with_context(|| format!("Failed to parse JSON response from {url}")).map_err(Into::into)
 }
 
-/// Parse timestamp string to i64, with error context
 fn parse_timestamp(ts: &str) -> anyhow::Result<i64> {
 	ts.parse::<i64>().map_err(|e| anyhow::anyhow!("Failed to parse timestamp '{}': {}", ts, e))
 }
 
-/// Parse funding rate string to f64, with error context
 fn parse_rate(rate: &str) -> anyhow::Result<f64> {
 	rate.parse::<f64>().map_err(|e| anyhow::anyhow!("Failed to parse rate '{}': {}", rate, e))
 }
 
-/// Find the most recent funding rate at or before a given timestamp
 fn find_rate_at_time(history: &[FundingRateHistoryResponse], target_time: i64, fallback: f64) -> f64 {
 	history
 		.iter()
@@ -152,11 +214,21 @@ fn find_rate_at_time(history: &[FundingRateHistoryResponse], target_time: i64, f
 		.unwrap_or(fallback)
 }
 
-/// Find open interest at or before a given timestamp
 fn find_oi_at_time(data: &[OpenInterestStatisticsResponse], target_time: i64, fallback: f64) -> f64 {
-	data
-		.iter()
-		.find(|d| parse_timestamp(&d.timestamp).unwrap_or(0) <= target_time)
-		.and_then(|d| parse_rate(&d.sum_open_interest).ok())
-		.unwrap_or(fallback)
+	for d in data {
+		match parse_timestamp(&d.timestamp) {
+			Ok(ts) if ts <= target_time => match parse_rate(&d.sum_open_interest) {
+				Ok(oi) => {
+					debug!("Found OI at timestamp {}: {}", ts, oi);
+					return oi;
+				},
+				Err(e) => warn!("Failed to parse sum_open_interest '{}': {}", d.sum_open_interest, e),
+			},
+			Ok(ts) => debug!("Skipping entry with timestamp {} (target: {})", ts, target_time),
+			Err(e) => warn!("Failed to parse timestamp '{}': {}", d.timestamp, e),
+		}
+	}
+
+	warn!("No matching OI data found for target_time {}, using fallback {}", target_time, fallback);
+	fallback
 }
