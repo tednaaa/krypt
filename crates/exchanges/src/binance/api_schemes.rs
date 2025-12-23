@@ -41,55 +41,42 @@ pub(crate) struct DailyTickerStream {
 	total_number_of_trades: u64,
 }
 
-// https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-Info
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FundingRateInfoResponse {
-	pub symbol: String,
-	adjusted_funding_rate_cap: String,
-	adjusted_funding_rate_floor: String,
-	pub funding_interval_hours: u64,
-}
-
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-History
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FundingRateHistoryRequestParams {
-	symbol: Option<String>,
-	start_time: Option<u64>,
-	end_time: Option<u64>,
+	pub symbol: String,
+	pub start_time: Option<u64>,
+	pub end_time: Option<u64>,
 	/// Default 100, max 1000
-	limit: Option<u32>,
+	pub limit: Option<u32>,
 }
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FundingRateHistoryResponse {
-	symbol: String,
 	pub funding_rate: String,
-	pub funding_time: i64,
-	mark_price: String,
 }
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenInterestStatisticsRequestParams {
-	symbol: String,
+	pub symbol: String,
 	/// 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d
-	period: String,
-	/// default 30, max 500
-	limit: Option<i64>,
-	start_time: Option<i64>,
-	end_time: Option<i64>,
+	pub period: String,
+	/// default 30, max 500, array latest item is current
+	pub limit: Option<i64>,
+	pub start_time: Option<i64>,
+	pub end_time: Option<i64>,
 }
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenInterestStatisticsResponse {
 	symbol: String,
 	pub sum_open_interest: String,
-	sum_open_interest_value: String,
+	pub sum_open_interest_value: String,
 	#[serde(rename = "CMCCirculatingSupply")]
-	cmc_circulating_supply: String,
+	pub cmc_circulating_supply: String,
 	pub timestamp: i64,
 }
 
@@ -124,20 +111,20 @@ pub(crate) type KlineCandlestickResponse = (
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LongShortRatioRequestParams {
-	symbol: String,
+	pub symbol: String,
 	/// 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d
-	period: String,
+	pub period: String,
 	/// default 30, max 500
-	limit: Option<i64>,
-	start_time: Option<i64>,
-	end_time: Option<i64>,
+	pub limit: Option<i64>,
+	pub start_time: Option<i64>,
+	pub end_time: Option<i64>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LongShortRatioResponse {
-	symbol: String,
-	long_short_ratio: String,
-	long_account: String,
-	short_account: String,
-	timestamp: String,
+	pub symbol: String,
+	pub long_short_ratio: String,
+	pub long_account: String,
+	pub short_account: String,
+	pub timestamp: String,
 }
