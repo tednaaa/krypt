@@ -1,19 +1,13 @@
 - currently EMA and Pivot are working incorrect, based on websocket accumulated data
 - need to fetch big history via rest api to calculate EMA/Pivot from ~1hr/4hr/1day intervals
 
-## Binance exchange
+- [Flat Detector](https://www.youtube.com/watch?v=dN4G4NQOSDQ)
+- [Open Interest](https://www.youtube.com/watch?v=yqnTmqOlYRc)
+- [Pump/Dump Screener](https://www.youtube.com/watch?v=pkCOC4F4cJ4)
 
-### Websocket API
+- Дедубликацию нужно делать на уровне (chain_id, contract_address)
 
-- [Liquidation Order Streams](https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/All-Market-Liquidation-Order-Streams)
+- [ласт версия кода](https://github.dev/tednaaa/krypt/tree/6b5f0a3bd78e6b95ba78fa41199aaca0afedca98)
 
-### Rest API
-
-- [Get Funding Rate Info](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-Info)
-- [Get Funding Rate History](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-History)
-- [Kline/Candlestick Data](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data)
-- [Open Interest Statistics](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics)
-- [Top Trader Long/Short Ratio (Positions)](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio)
-- [Long/Short Ratio](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Long-Short-Ratio)
-- [Taker Buy/Sell Volume](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Taker-BuySell-Volume)
-- [Basis - difference between spot & future](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Basis)
+- Смотрим если в течении нескольких дней (через конфиг) цена, находится по флете, отклонения максимум 5/10%
+- Делаем запрос на открытый интерес рест апи и если оно растет или падает, значит, будет памп или дамп

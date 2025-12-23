@@ -1,0 +1,15 @@
+
+[package]
+name = "exchanges"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+async-trait.workspace = true
+tokio.workspace = true

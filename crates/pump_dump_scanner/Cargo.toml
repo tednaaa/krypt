@@ -1,0 +1,13 @@
+
+[package]
+name = "pump_dump_scanner"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+exchanges.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
