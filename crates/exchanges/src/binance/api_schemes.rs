@@ -90,7 +90,7 @@ pub(crate) struct OpenInterestStatisticsResponse {
 	sum_open_interest_value: String,
 	#[serde(rename = "CMCCirculatingSupply")]
 	cmc_circulating_supply: String,
-	pub timestamp: String,
+	pub timestamp: i64,
 }
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data
