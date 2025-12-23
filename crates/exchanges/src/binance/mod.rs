@@ -1,18 +1,19 @@
-use crate::{Exchange, utils::calculate_percent_change};
-use api_schemes::{FundingRateHistoryResponse, FundingRateInfoResponse, OpenInterestStatisticsResponse};
+use crate::{
+	Exchange,
+	binance::api_schemes::{FundingRateHistoryRequestParams, OpenInterestStatisticsRequestParams},
+};
+use anyhow::{Context, bail};
+use api_schemes::{FundingRateHistoryResponse, OpenInterestStatisticsResponse};
 mod api_schemes;
 
 const BINANCE_FUTURES_API_BASE: &str = "https://fapi.binance.com";
-const ONE_HOUR_MS: i64 = 60 * 60 * 1000;
-const FOUR_HOURS_MS: i64 = 4 * ONE_HOUR_MS;
-const FIFTEEN_MIN_MS: i64 = 15 * 60 * 1000;
-const THIRTY_DAYS_MS: i64 = 30 * 24 * ONE_HOUR_MS;
 
 pub struct BinanceExchange {
 	client: reqwest::Client,
 }
 
 impl BinanceExchange {
+	#[must_use]
 	pub fn new() -> Self {
 		Self { client: reqwest::Client::new() }
 	}
@@ -27,136 +28,125 @@ impl Default for BinanceExchange {
 #[async_trait::async_trait]
 impl Exchange for BinanceExchange {
 	async fn get_funding_rate_info(&self, symbol: &str) -> anyhow::Result<crate::FundingRateInfo> {
-		let now = now_ms()?;
-		let four_hours_ago = ms_ago(FOUR_HOURS_MS)?;
-		let one_hour_ago = ms_ago(ONE_HOUR_MS)?;
+		let url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/fundingRate");
+		let response: Vec<FundingRateHistoryResponse> = self
+			.client
+			.get(&url)
+			.query(&FundingRateHistoryRequestParams { symbol: String::from(symbol), limit: Some(100), ..Default::default() })
+			.send()
+			.await?
+			.error_for_status()?
+			.json()
+			.await
+			.with_context(|| format!("Failed to fetch funding rate info for {symbol}"))?;
 
-		let info_url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/fundingInfo?symbol={symbol}");
-		let history_url =
-			format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/fundingRate?symbol={symbol}&startTime={four_hours_ago}&limit=1000");
+		let current_funding_rate = response.first().map(|item| item.funding_rate.clone()).unwrap_or_default();
 
-		let (info_response, mut history): (Vec<FundingRateInfoResponse>, Vec<FundingRateHistoryResponse>) =
-			tokio::try_join!(fetch_json(&self.client, &info_url), fetch_json(&self.client, &history_url))?;
+		let rates: Vec<f64> = response.iter().filter_map(|item| item.funding_rate.parse::<f64>().ok()).collect();
 
-		let info = info_response
-			.into_iter()
-			.find(|i| i.symbol == symbol)
-			.ok_or_else(|| anyhow::anyhow!("Symbol '{symbol}' not found"))?;
+		let average_funding_rate = if rates.is_empty() {
+			String::from("0.0000")
+		} else {
+			let sum: f64 = rates.iter().sum();
+			let average = sum / rates.len() as f64;
+			format!("{average:.4}")
+		};
 
-		if history.is_empty() {
-			anyhow::bail!("No funding rate history available for symbol '{symbol}'");
-		}
-
-		history.sort_by(|a, b| b.funding_time.cmp(&a.funding_time));
-
-		let current_rate = parse_rate(&history[0].funding_rate)?;
-
-		let rate_1h = find_rate_at_time(&history, one_hour_ago, current_rate);
-		let rate_4h = find_rate_at_time(&history, four_hours_ago, current_rate);
-
-		Ok(crate::FundingRateInfo {
-			funding_rate: format!("{current_rate:.6}"),
-			funding_interval_hours: info.funding_interval_hours.to_string(),
-			funding_rate_percent_change_1_hour: calculate_percent_change(rate_1h, current_rate),
-			funding_rate_percent_change_4_hours: calculate_percent_change(rate_4h, current_rate),
-		})
+		Ok(crate::FundingRateInfo { funding_rate: current_funding_rate, average_funding_rate })
 	}
 
 	async fn get_open_interest_info(&self, symbol: &str) -> anyhow::Result<crate::OpenInterestInfo> {
-		let now = now_ms()?;
+		let url = format!("{BINANCE_FUTURES_API_BASE}/futures/data/openInterestHist");
 
-		// Calculate timestamps
-		let thirty_days_ago = ms_ago(THIRTY_DAYS_MS)?;
-		let five_hours_ago = ms_ago(5 * ONE_HOUR_MS)?;
-		let four_hours_ago = ms_ago(FOUR_HOURS_MS)?;
-		let one_hour_ago = ms_ago(ONE_HOUR_MS)?;
-		let fifteen_min_ago = ms_ago(FIFTEEN_MIN_MS)?;
-
-		let url_5m = format!(
-			"{BINANCE_FUTURES_API_BASE}/futures/data/openInterestHist?symbol={symbol}&period=5m&limit=500&startTime={five_hours_ago}"
+		let (response_5m, response_1d) = tokio::join!(
+			async {
+				let limit = Some(48); // to get 5m - 4h distance
+				self
+					.client
+					.get(&url)
+					.query(&OpenInterestStatisticsRequestParams {
+						symbol: String::from(symbol),
+						period: String::from("5m"),
+						limit,
+						..Default::default()
+					})
+					.send()
+					.await?
+					.error_for_status()?
+					.json::<Vec<OpenInterestStatisticsResponse>>()
+					.await
+					.with_context(|| format!("Failed to fetch open interest info for {symbol} (5m)"))
+			},
+			async {
+				let limit = Some(30); // 30 days
+				self
+					.client
+					.get(&url)
+					.query(&OpenInterestStatisticsRequestParams {
+						symbol: String::from(symbol),
+						period: String::from("1d"),
+						limit,
+						..Default::default()
+					})
+					.send()
+					.await?
+					.error_for_status()?
+					.json::<Vec<OpenInterestStatisticsResponse>>()
+					.await
+					.with_context(|| format!("Failed to fetch open interest info for {symbol} (1d)"))
+			}
 		);
-		let url_1h = format!(
-			"{BINANCE_FUTURES_API_BASE}/futures/data/openInterestHist?symbol={symbol}&period=1h&limit=500&startTime={five_hours_ago}"
-		);
-		let url_1d = format!(
-			"{BINANCE_FUTURES_API_BASE}/futures/data/openInterestHist?symbol={symbol}&period=1d&limit=35&startTime={thirty_days_ago}"
-		);
 
-		let (data_5m, data_1h, data_1d): (
-			Vec<OpenInterestStatisticsResponse>,
-			Vec<OpenInterestStatisticsResponse>,
-			Vec<OpenInterestStatisticsResponse>,
-		) = tokio::try_join!(
-			fetch_json(&self.client, &url_5m),
-			fetch_json(&self.client, &url_1h),
-			fetch_json(&self.client, &url_1d)
-		)?;
+		let response_5m = response_5m?;
+		let response_1d = response_1d?;
 
-		let current_oi = data_5m
-			.last()
-			.ok_or_else(|| anyhow::anyhow!("No current open interest data for symbol '{symbol}'"))?
-			.sum_open_interest
-			.parse::<f64>()?;
+		// Calculate percent changes for 5m period data
+		// Latest item is at the end of the array (highest index), oldest at index 0
+		let open_interest_percent_change_5_minutes = calculate_percent_change(&response_5m, 1)?;
+		let open_interest_percent_change_15_minutes = calculate_percent_change(&response_5m, 3)?;
+		let open_interest_percent_change_1_hour = calculate_percent_change(&response_5m, 12)?;
+		let open_interest_percent_change_4_hours = calculate_percent_change(&response_5m, 47)?;
 
-		let oi_15m = find_oi_at_time(&data_5m, fifteen_min_ago, current_oi);
-
-		let combined_short_term: Vec<_> = data_5m.iter().chain(data_1h.iter()).collect();
-		let oi_1h = combined_short_term
-			.iter()
-			.find(|d| parse_timestamp(&d.timestamp).unwrap_or(0) <= one_hour_ago)
-			.and_then(|d| parse_rate(&d.sum_open_interest).ok())
-			.unwrap_or(current_oi);
-
-		let oi_4h = find_oi_at_time(&data_1h, four_hours_ago, current_oi);
-		let oi_30d = data_1d.first().and_then(|d| parse_rate(&d.sum_open_interest).ok()).unwrap_or(current_oi);
+		// Calculate percent changes for 1d period data
+		let open_interest_percent_change_1_day = calculate_percent_change(&response_1d, 1)?;
+		let open_interest_percent_change_7_days = calculate_percent_change(&response_1d, 7)?;
+		let open_interest_percent_change_30_days = calculate_percent_change(&response_1d, 29)?;
 
 		Ok(crate::OpenInterestInfo {
-			open_interest_percent_change_15_minutes: calculate_percent_change(oi_15m, current_oi),
-			open_interest_percent_change_1_hour: calculate_percent_change(oi_1h, current_oi),
-			open_interest_percent_change_4_hours: calculate_percent_change(oi_4h, current_oi),
-			open_interest_percent_change_30_days: calculate_percent_change(oi_30d, current_oi),
+			open_interest_percent_change_5_minutes,
+			open_interest_percent_change_15_minutes,
+			open_interest_percent_change_1_hour,
+			open_interest_percent_change_4_hours,
+			open_interest_percent_change_1_day,
+			open_interest_percent_change_7_days,
+			open_interest_percent_change_30_days,
 		})
 	}
 }
 
-fn now_ms() -> anyhow::Result<i64> {
-	Ok(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis() as i64)
-}
+/// Calculate percent change between the most recent value (last index) and a value at a given offset back in time
+fn calculate_percent_change(data: &[OpenInterestStatisticsResponse], offset: usize) -> anyhow::Result<f64> {
+	if data.len() <= offset {
+		bail!("Insufficient data: need at least {} items, got {}", offset + 1, data.len());
+	}
 
-/// Calculate timestamp for N milliseconds ago
-fn ms_ago(ms: i64) -> anyhow::Result<i64> {
-	Ok(now_ms()? - ms)
-}
+	let last_idx = data.len() - 1;
+	let previous_idx = last_idx - offset;
 
-/// Fetch JSON from a URL with proper error handling
-async fn fetch_json<T: serde::de::DeserializeOwned>(client: &reqwest::Client, url: &str) -> anyhow::Result<T> {
-	client.get(url).send().await?.error_for_status()?.json().await.map_err(Into::into)
-}
+	let current = data[last_idx]
+		.sum_open_interest
+		.parse::<f64>()
+		.with_context(|| format!("Failed to parse current open interest: {}", data[last_idx].sum_open_interest))?;
 
-/// Parse timestamp string to i64, with error context
-fn parse_timestamp(ts: &str) -> anyhow::Result<i64> {
-	ts.parse::<i64>().map_err(|e| anyhow::anyhow!("Failed to parse timestamp '{}': {}", ts, e))
-}
+	let previous = data[previous_idx]
+		.sum_open_interest
+		.parse::<f64>()
+		.with_context(|| format!("Failed to parse previous open interest: {}", data[previous_idx].sum_open_interest))?;
 
-/// Parse funding rate string to f64, with error context
-fn parse_rate(rate: &str) -> anyhow::Result<f64> {
-	rate.parse::<f64>().map_err(|e| anyhow::anyhow!("Failed to parse rate '{}': {}", rate, e))
-}
+	if previous == 0.0 {
+		return Ok(0.0);
+	}
 
-/// Find the most recent funding rate at or before a given timestamp
-fn find_rate_at_time(history: &[FundingRateHistoryResponse], target_time: i64, fallback: f64) -> f64 {
-	history
-		.iter()
-		.find(|h| h.funding_time <= target_time)
-		.and_then(|h| parse_rate(&h.funding_rate).ok())
-		.unwrap_or(fallback)
-}
-
-/// Find open interest at or before a given timestamp
-fn find_oi_at_time(data: &[OpenInterestStatisticsResponse], target_time: i64, fallback: f64) -> f64 {
-	data
-		.iter()
-		.find(|d| parse_timestamp(&d.timestamp).unwrap_or(0) <= target_time)
-		.and_then(|d| parse_rate(&d.sum_open_interest).ok())
-		.unwrap_or(fallback)
+	let percent_change = ((current - previous) / previous) * 100.0;
+	Ok((percent_change * 100.0).round() / 100.0)
 }

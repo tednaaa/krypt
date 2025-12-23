@@ -12,15 +12,16 @@ pub trait Exchange {
 #[derive(Debug)]
 pub struct FundingRateInfo {
 	funding_rate: String,
-	funding_interval_hours: String,
-	funding_rate_percent_change_1_hour: String,
-	funding_rate_percent_change_4_hours: String,
+	average_funding_rate: String,
 }
 
 #[derive(Debug)]
 pub struct OpenInterestInfo {
-	open_interest_percent_change_15_minutes: String,
-	open_interest_percent_change_1_hour: String,
-	open_interest_percent_change_4_hours: String,
-	open_interest_percent_change_30_days: String,
+	open_interest_percent_change_5_minutes: f64,
+	open_interest_percent_change_15_minutes: f64,
+	open_interest_percent_change_1_hour: f64,
+	open_interest_percent_change_4_hours: f64,
+	open_interest_percent_change_1_day: f64,
+	open_interest_percent_change_7_days: f64,
+	open_interest_percent_change_30_days: f64,
 }

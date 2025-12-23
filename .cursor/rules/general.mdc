@@ -1,0 +1,13 @@
+---
+alwaysApply: true
+---
+
+- Write clean, readable code with clear variable names
+- Keep functions small and focused on a single responsibility
+- Add comments for complex logic, but prefer self-documenting code
+- Prefer composition over inheritance
+
+- Always include proper error handling with meaningful messages
+- Write unit tests for new functions and bug fixes
+- Don't catch errors silently - log or handle them appropriately
+- Validate inputs at system boundaries
