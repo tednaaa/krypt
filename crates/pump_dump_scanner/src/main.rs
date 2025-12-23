@@ -2,7 +2,7 @@ use anyhow::Context;
 use exchanges::{BinanceExchange, Exchange};
 use tracing::info;
 
-use crate::config::Config;
+use crate::{config::Config, telegram::TelegramBot};
 
 mod config;
 mod telegram;
@@ -20,6 +20,10 @@ async fn main() -> anyhow::Result<()> {
 
 	let config = Config::load("config.toml").context("Failed to load configuration")?;
 	info!("✅ Configuration loaded");
+
+	let telegram_bot = TelegramBot::new(config.telegram);
+
+	telegram_bot.send_alert().await?;
 
 	let binance = BinanceExchange::new();
 

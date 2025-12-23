@@ -2,13 +2,13 @@ use anyhow::Context;
 use serde::Deserialize;
 use std::fs;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
 	pub scanner: ScannerConfig,
 	pub telegram: TelegramConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ScannerConfig {
 	pub price_change_percent: f64,
 	pub volume_multiplier: f64,
@@ -16,11 +16,11 @@ pub struct ScannerConfig {
 	pub max_window_mins: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TelegramConfig {
 	pub bot_token: String,
 	pub chat_id: String,
-	pub topic_id: Option<String>,
+	pub thread_id: Option<i32>,
 }
 
 impl Config {
