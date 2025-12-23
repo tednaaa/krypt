@@ -38,7 +38,7 @@ impl Exchange for BinanceExchange {
 			.error_for_status()?
 			.json()
 			.await
-			.with_context(|| format!("Failed to fetch funding rate info for {symbol}"))?;
+			.context(format!("Failed to fetch funding rate info for {symbol}"))?;
 
 		let current_funding_rate = response.first().map(|item| item.funding_rate.clone()).unwrap_or_default();
 
@@ -75,7 +75,7 @@ impl Exchange for BinanceExchange {
 					.error_for_status()?
 					.json::<Vec<OpenInterestStatisticsResponse>>()
 					.await
-					.with_context(|| format!("Failed to fetch open interest info for {symbol} (5m)"))
+					.context(format!("Failed to fetch open interest info for {symbol} (5m)"))
 			},
 			async {
 				let limit = Some(30); // 30 days
@@ -93,7 +93,7 @@ impl Exchange for BinanceExchange {
 					.error_for_status()?
 					.json::<Vec<OpenInterestStatisticsResponse>>()
 					.await
-					.with_context(|| format!("Failed to fetch open interest info for {symbol} (1d)"))
+					.context(format!("Failed to fetch open interest info for {symbol} (1d)"))
 			}
 		);
 
@@ -136,12 +136,12 @@ fn calculate_percent_change(data: &[OpenInterestStatisticsResponse], offset: usi
 	let current = data[last_idx]
 		.sum_open_interest
 		.parse::<f64>()
-		.with_context(|| format!("Failed to parse current open interest: {}", data[last_idx].sum_open_interest))?;
+		.context(format!("Failed to parse current open interest: {}", data[last_idx].sum_open_interest))?;
 
 	let previous = data[previous_idx]
 		.sum_open_interest
 		.parse::<f64>()
-		.with_context(|| format!("Failed to parse previous open interest: {}", data[previous_idx].sum_open_interest))?;
+		.context(format!("Failed to parse previous open interest: {}", data[previous_idx].sum_open_interest))?;
 
 	if previous == 0.0 {
 		return Ok(0.0);

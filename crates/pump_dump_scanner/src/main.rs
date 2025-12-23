@@ -1,5 +1,11 @@
+use anyhow::Context;
 use exchanges::{BinanceExchange, Exchange};
 use tracing::info;
+
+use crate::config::Config;
+
+mod config;
+mod telegram;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -10,7 +16,10 @@ async fn main() -> anyhow::Result<()> {
 		)
 		.init();
 
-	info!("Starting pump/dump scanner");
+	info!("✅ Starting pump/dump scanner");
+
+	let config = Config::load("config.toml").context("Failed to load configuration")?;
+	info!("✅ Configuration loaded");
 
 	let binance = BinanceExchange::new();
 
