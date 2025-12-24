@@ -56,7 +56,7 @@ impl TelegramBot {
 
 	fn format_funding_info(&self, funding: &FundingRateInfo) -> String {
 		format!(
-			"📊 <b>Funding Rate:</b> <code>{}</code> (avg: <code>{}</code>)",
+			"📊 <b>Funding Rate:</b> <code>{:.8}</code> (avg: <code>{:.8}</code>)",
 			funding.funding_rate, funding.average_funding_rate
 		)
 	}

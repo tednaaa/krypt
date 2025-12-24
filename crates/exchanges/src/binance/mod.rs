@@ -49,7 +49,7 @@ impl Exchange for BinanceExchange {
 		} else {
 			let sum: f64 = rates.iter().sum();
 			let average = sum / rates.len() as f64;
-			format!("{average:.4}")
+			average.to_string()
 		};
 
 		Ok(crate::FundingRateInfo { funding_rate: current_funding_rate, average_funding_rate })
@@ -148,5 +148,5 @@ fn calculate_percent_change(data: &[OpenInterestStatisticsResponse], offset: usi
 	}
 
 	let percent_change = ((current - previous) / previous) * 100.0;
-	Ok((percent_change * 100.0).round() / 100.0)
+	Ok(percent_change)
 }

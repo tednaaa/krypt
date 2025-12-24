@@ -1,5 +1,4 @@
 mod binance;
-mod utils;
 
 pub use binance::BinanceExchange;
 
