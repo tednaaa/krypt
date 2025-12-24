@@ -16,11 +16,11 @@ pub struct FundingRateInfo {
 
 #[derive(Debug)]
 pub struct OpenInterestInfo {
-	pub open_interest_percent_change_5_minutes: f64,
-	pub open_interest_percent_change_15_minutes: f64,
-	pub open_interest_percent_change_1_hour: f64,
-	pub open_interest_percent_change_4_hours: f64,
-	pub open_interest_percent_change_1_day: f64,
-	pub open_interest_percent_change_7_days: f64,
-	pub open_interest_percent_change_30_days: f64,
+	pub percent_change_5_minutes: f64,
+	pub percent_change_15_minutes: f64,
+	pub percent_change_1_hour: f64,
+	pub percent_change_4_hours: f64,
+	pub percent_change_1_day: f64,
+	pub percent_change_7_days: f64,
+	pub percent_change_30_days: f64,
 }

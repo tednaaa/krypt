@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
 
 	let binance = BinanceExchange::new();
 
-	let test_symbol = "SQDUSDT";
+	let test_symbol = "ZECUSDT";
 
 	let (funding_rate_info, open_interest_info) =
 		tokio::try_join!(binance.get_funding_rate_info(test_symbol), binance.get_open_interest_info(test_symbol))?;

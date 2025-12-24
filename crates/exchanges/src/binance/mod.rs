@@ -102,24 +102,24 @@ impl Exchange for BinanceExchange {
 
 		// Calculate percent changes for 5m period data
 		// Latest item is at the end of the array (highest index), oldest at index 0
-		let open_interest_percent_change_5_minutes = calculate_percent_change(&response_5m, 1)?;
-		let open_interest_percent_change_15_minutes = calculate_percent_change(&response_5m, 3)?;
-		let open_interest_percent_change_1_hour = calculate_percent_change(&response_5m, 12)?;
-		let open_interest_percent_change_4_hours = calculate_percent_change(&response_5m, 47)?;
+		let percent_change_5_minutes = calculate_percent_change(&response_5m, 1)?;
+		let percent_change_15_minutes = calculate_percent_change(&response_5m, 3)?;
+		let percent_change_1_hour = calculate_percent_change(&response_5m, 12)?;
+		let percent_change_4_hours = calculate_percent_change(&response_5m, 47)?;
 
 		// Calculate percent changes for 1d period data
-		let open_interest_percent_change_1_day = calculate_percent_change(&response_1d, 1)?;
-		let open_interest_percent_change_7_days = calculate_percent_change(&response_1d, 7)?;
-		let open_interest_percent_change_30_days = calculate_percent_change(&response_1d, 29)?;
+		let percent_change_1_day = calculate_percent_change(&response_1d, 1)?;
+		let percent_change_7_days = calculate_percent_change(&response_1d, 7)?;
+		let percent_change_30_days = calculate_percent_change(&response_1d, 29)?;
 
 		Ok(crate::OpenInterestInfo {
-			open_interest_percent_change_5_minutes,
-			open_interest_percent_change_15_minutes,
-			open_interest_percent_change_1_hour,
-			open_interest_percent_change_4_hours,
-			open_interest_percent_change_1_day,
-			open_interest_percent_change_7_days,
-			open_interest_percent_change_30_days,
+			percent_change_5_minutes,
+			percent_change_15_minutes,
+			percent_change_1_hour,
+			percent_change_4_hours,
+			percent_change_1_day,
+			percent_change_7_days,
+			percent_change_30_days,
 		})
 	}
 }

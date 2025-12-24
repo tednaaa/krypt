@@ -38,12 +38,11 @@ impl TelegramBot {
 
 	fn format_alert_message(&self, token: &TokenAlert) -> String {
 		let funding = &token.funding_rate_info;
-		let oi = &token.open_interest_info;
 
 		let sections = [
 			self.format_header(token),
 			self.format_funding_info(funding),
-			self.format_open_interest_info(oi),
+			self.format_market_stats(token),
 			self.format_footer(&token.symbol),
 		];
 
@@ -51,31 +50,35 @@ impl TelegramBot {
 	}
 
 	fn format_header(&self, token: &TokenAlert) -> String {
-		format!("<code>{}</code>", token.symbol)
+		format!("🔔 Токен <code>{}</code>", token.symbol)
 	}
 
 	fn format_funding_info(&self, funding: &FundingRateInfo) -> String {
 		format!(
-			"📊 <b>Funding Rate:</b> <code>{:.8}</code> (avg: <code>{:.8}</code>)",
+			"📊 <b>Funding:</b> <code>{:.8}</code> (avg: <code>{:.8}</code>)",
 			funding.funding_rate, funding.average_funding_rate
 		)
 	}
 
-	fn format_open_interest_info(&self, oi: &OpenInterestInfo) -> String {
-		let format_value = |value: f64| {
-			if value >= 0.0 { format!("+{value:.2}%") } else { format!("{value:.2}%") }
+	fn format_market_stats(&self, token: &TokenAlert) -> String {
+		let oi = &token.open_interest_info;
+
+		let format = |label: &str, value: f64| {
+			let emoji = if value >= 0.0 { "🟩" } else { "🟥" };
+			let sign = if value >= 0.0 { "+" } else { "" };
+			format!("{emoji}  <code>{sign}{value:.2}% ({label})</code>")
 		};
 
 		format!(
-			"📈 <b>Open Interest:</b>\n\
-         <code>15m: {}</code> \t•\t <code>1h: {}</code> \t•\t <code>4h: {}</code>\n\
-         <code>1d: {}</code> \t•\t <code>7d: {}</code> \t•\t <code>30d: {}</code>",
-			format_value(oi.open_interest_percent_change_15_minutes),
-			format_value(oi.open_interest_percent_change_1_hour),
-			format_value(oi.open_interest_percent_change_4_hours),
-			format_value(oi.open_interest_percent_change_1_day),
-			format_value(oi.open_interest_percent_change_7_days),
-			format_value(oi.open_interest_percent_change_30_days)
+			"<code>📈 Open Interest</code>\n\
+			{}\n\
+			{}\n\
+			{}\n\
+			{}",
+			format("15m", oi.percent_change_15_minutes),
+			format("1h", oi.percent_change_1_hour),
+			format("4h", oi.percent_change_4_hours),
+			format("24h", oi.percent_change_1_day),
 		)
 	}
 
