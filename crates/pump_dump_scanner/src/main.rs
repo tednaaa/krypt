@@ -2,7 +2,10 @@ use anyhow::Context;
 use exchanges::{BinanceExchange, Exchange};
 use tracing::info;
 
-use crate::{config::Config, telegram::TelegramBot};
+use crate::{
+	config::Config,
+	telegram::{TelegramBot, TokenAlert},
+};
 
 mod config;
 mod telegram;
@@ -22,14 +25,18 @@ async fn main() -> anyhow::Result<()> {
 	info!("✅ Configuration loaded");
 
 	let telegram_bot = TelegramBot::new(config.telegram);
-
-	telegram_bot.send_alert().await?;
+	info!("✅ Telegram bot initialized");
 
 	let binance = BinanceExchange::new();
 
-	let test_symbol = "ANIMEUSDT";
-	info!("{:?}", binance.get_funding_rate_info(test_symbol).await?);
-	info!("{:?}", binance.get_open_interest_info(test_symbol).await?);
+	let test_symbol = "SQDUSDT";
+
+	let (funding_rate_info, open_interest_info) =
+		tokio::try_join!(binance.get_funding_rate_info(test_symbol), binance.get_open_interest_info(test_symbol))?;
+
+	let token_alert = TokenAlert { symbol: String::from(test_symbol), funding_rate_info, open_interest_info };
+
+	telegram_bot.send_alert(&token_alert).await?;
 
 	Ok(())
 }
