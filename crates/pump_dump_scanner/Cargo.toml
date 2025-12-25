@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 exchanges.workspace = true
+coinglass.workspace = true
 
 tokio.workspace = true
 serde.workspace = true
