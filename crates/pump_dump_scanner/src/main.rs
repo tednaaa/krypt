@@ -28,19 +28,19 @@ async fn main() -> anyhow::Result<()> {
 	let telegram_bot = TelegramBot::new(config.telegram);
 	info!("✅ Telegram bot initialized");
 
-	// coinglass::login(&config.coinglass.login, &config.coinglass.password)?;
+	coinglass::login(&config.coinglass.login, &config.coinglass.password)?;
 	info!("✅ Successfully logged in to CoinGlass");
 
-	let binance = BinanceExchange::new();
+	// let binance = BinanceExchange::new();
 
-	let test_symbol = "ZBTUSDT";
+	// let test_symbol = "ZBTUSDT";
 
-	let open_interest_info = binance.get_open_interest_info(test_symbol).await?;
-	let chart_screenshot = coinglass::get_chart_screenshot(test_symbol)?;
+	// let open_interest_info = binance.get_open_interest_info(test_symbol).await?;
+	// let chart_screenshot = coinglass::get_chart_screenshot(test_symbol)?;
 
-	let token_alert = TokenAlert { symbol: String::from(test_symbol), open_interest_info };
+	// let token_alert = TokenAlert { symbol: String::from(test_symbol), open_interest_info };
 
-	telegram_bot.send_alert(&token_alert, chart_screenshot).await?;
+	// telegram_bot.send_alert(&token_alert, chart_screenshot).await?;
 
 	Ok(())
 }
