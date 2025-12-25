@@ -1,7 +1,7 @@
 use exchanges::{FundingRateInfo, OpenInterestInfo};
 use teloxide::{
 	prelude::*,
-	types::{MessageId, ParseMode, ThreadId},
+	types::{InputFile, MediaPhoto, MessageId, ParseMode, ThreadId},
 };
 
 use crate::config::TelegramConfig;
@@ -23,9 +23,12 @@ impl TelegramBot {
 		Self { bot, config }
 	}
 
-	pub async fn send_alert(&self, token: &TokenAlert) -> anyhow::Result<()> {
+	pub async fn send_alert(&self, token: &TokenAlert, chart_screenshot: Vec<u8>) -> anyhow::Result<()> {
 		let chat_id = self.config.chat_id.clone();
-		let mut request = self.bot.send_message(chat_id, self.format_alert_message(token)).parse_mode(ParseMode::Html);
+		let caption = self.format_alert_message(token);
+
+		let mut request =
+			self.bot.send_photo(chat_id, InputFile::memory(chart_screenshot)).caption(caption).parse_mode(ParseMode::Html);
 
 		if let Some(thread_id) = self.config.thread_id {
 			request = request.message_thread_id(ThreadId(MessageId(thread_id)));
