@@ -13,7 +13,6 @@ pub struct TelegramBot {
 
 pub struct TokenAlert {
 	pub symbol: String,
-	pub funding_rate_info: FundingRateInfo,
 	pub open_interest_info: OpenInterestInfo,
 }
 
@@ -40,27 +39,13 @@ impl TelegramBot {
 	}
 
 	fn format_alert_message(&self, token: &TokenAlert) -> String {
-		let funding = &token.funding_rate_info;
-
-		let sections = [
-			self.format_header(token),
-			self.format_funding_info(funding),
-			self.format_market_stats(token),
-			self.format_footer(&token.symbol),
-		];
+		let sections = [self.format_header(token), self.format_market_stats(token), self.format_footer(&token.symbol)];
 
 		sections.join("\n\n")
 	}
 
 	fn format_header(&self, token: &TokenAlert) -> String {
 		format!("🔔 Токен <code>{}</code>", token.symbol)
-	}
-
-	fn format_funding_info(&self, funding: &FundingRateInfo) -> String {
-		format!(
-			"📊 <b>Funding:</b> <code>{:.8}</code> (avg: <code>{:.8}</code>)",
-			funding.funding_rate, funding.average_funding_rate
-		)
 	}
 
 	fn format_market_stats(&self, token: &TokenAlert) -> String {
@@ -73,7 +58,7 @@ impl TelegramBot {
 		};
 
 		format!(
-			"<code>📈 Open Interest</code>\n\
+			"📈 Open Interest\n\
 			{}\n\
 			{}\n\
 			{}\n\

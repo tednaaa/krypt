@@ -35,12 +35,10 @@ async fn main() -> anyhow::Result<()> {
 
 	let test_symbol = "ZBTUSDT";
 
-	let (funding_rate_info, open_interest_info) =
-		tokio::try_join!(binance.get_funding_rate_info(test_symbol), binance.get_open_interest_info(test_symbol))?;
-
+	let open_interest_info = binance.get_open_interest_info(test_symbol).await?;
 	let chart_screenshot = coinglass::get_chart_screenshot(test_symbol)?;
 
-	let token_alert = TokenAlert { symbol: String::from(test_symbol), funding_rate_info, open_interest_info };
+	let token_alert = TokenAlert { symbol: String::from(test_symbol), open_interest_info };
 
 	telegram_bot.send_alert(&token_alert, chart_screenshot).await?;
 
