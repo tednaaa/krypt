@@ -1,5 +1,4 @@
 mod binance;
-mod utils;
 
 pub use binance::BinanceExchange;
 
@@ -11,17 +10,17 @@ pub trait Exchange {
 
 #[derive(Debug)]
 pub struct FundingRateInfo {
-	funding_rate: String,
-	average_funding_rate: String,
+	pub funding_rate: String,
+	pub average_funding_rate: String,
 }
 
 #[derive(Debug)]
 pub struct OpenInterestInfo {
-	open_interest_percent_change_5_minutes: f64,
-	open_interest_percent_change_15_minutes: f64,
-	open_interest_percent_change_1_hour: f64,
-	open_interest_percent_change_4_hours: f64,
-	open_interest_percent_change_1_day: f64,
-	open_interest_percent_change_7_days: f64,
-	open_interest_percent_change_30_days: f64,
+	pub percent_change_5_minutes: f64,
+	pub percent_change_15_minutes: f64,
+	pub percent_change_1_hour: f64,
+	pub percent_change_4_hours: f64,
+	pub percent_change_1_day: f64,
+	pub percent_change_7_days: f64,
+	pub percent_change_30_days: f64,
 }

@@ -38,7 +38,7 @@ impl Exchange for BinanceExchange {
 			.error_for_status()?
 			.json()
 			.await
-			.with_context(|| format!("Failed to fetch funding rate info for {symbol}"))?;
+			.context(format!("Failed to fetch funding rate info for {symbol}"))?;
 
 		let current_funding_rate = response.first().map(|item| item.funding_rate.clone()).unwrap_or_default();
 
@@ -49,7 +49,7 @@ impl Exchange for BinanceExchange {
 		} else {
 			let sum: f64 = rates.iter().sum();
 			let average = sum / rates.len() as f64;
-			format!("{average:.4}")
+			average.to_string()
 		};
 
 		Ok(crate::FundingRateInfo { funding_rate: current_funding_rate, average_funding_rate })
@@ -75,7 +75,7 @@ impl Exchange for BinanceExchange {
 					.error_for_status()?
 					.json::<Vec<OpenInterestStatisticsResponse>>()
 					.await
-					.with_context(|| format!("Failed to fetch open interest info for {symbol} (5m)"))
+					.context(format!("Failed to fetch open interest info for {symbol} (5m)"))
 			},
 			async {
 				let limit = Some(30); // 30 days
@@ -93,7 +93,7 @@ impl Exchange for BinanceExchange {
 					.error_for_status()?
 					.json::<Vec<OpenInterestStatisticsResponse>>()
 					.await
-					.with_context(|| format!("Failed to fetch open interest info for {symbol} (1d)"))
+					.context(format!("Failed to fetch open interest info for {symbol} (1d)"))
 			}
 		);
 
@@ -102,24 +102,24 @@ impl Exchange for BinanceExchange {
 
 		// Calculate percent changes for 5m period data
 		// Latest item is at the end of the array (highest index), oldest at index 0
-		let open_interest_percent_change_5_minutes = calculate_percent_change(&response_5m, 1)?;
-		let open_interest_percent_change_15_minutes = calculate_percent_change(&response_5m, 3)?;
-		let open_interest_percent_change_1_hour = calculate_percent_change(&response_5m, 12)?;
-		let open_interest_percent_change_4_hours = calculate_percent_change(&response_5m, 47)?;
+		let percent_change_5_minutes = calculate_percent_change(&response_5m, 1)?;
+		let percent_change_15_minutes = calculate_percent_change(&response_5m, 3)?;
+		let percent_change_1_hour = calculate_percent_change(&response_5m, 12)?;
+		let percent_change_4_hours = calculate_percent_change(&response_5m, 47)?;
 
 		// Calculate percent changes for 1d period data
-		let open_interest_percent_change_1_day = calculate_percent_change(&response_1d, 1)?;
-		let open_interest_percent_change_7_days = calculate_percent_change(&response_1d, 7)?;
-		let open_interest_percent_change_30_days = calculate_percent_change(&response_1d, 29)?;
+		let percent_change_1_day = calculate_percent_change(&response_1d, 1)?;
+		let percent_change_7_days = calculate_percent_change(&response_1d, 7)?;
+		let percent_change_30_days = calculate_percent_change(&response_1d, 29)?;
 
 		Ok(crate::OpenInterestInfo {
-			open_interest_percent_change_5_minutes,
-			open_interest_percent_change_15_minutes,
-			open_interest_percent_change_1_hour,
-			open_interest_percent_change_4_hours,
-			open_interest_percent_change_1_day,
-			open_interest_percent_change_7_days,
-			open_interest_percent_change_30_days,
+			percent_change_5_minutes,
+			percent_change_15_minutes,
+			percent_change_1_hour,
+			percent_change_4_hours,
+			percent_change_1_day,
+			percent_change_7_days,
+			percent_change_30_days,
 		})
 	}
 }
@@ -136,17 +136,17 @@ fn calculate_percent_change(data: &[OpenInterestStatisticsResponse], offset: usi
 	let current = data[last_idx]
 		.sum_open_interest
 		.parse::<f64>()
-		.with_context(|| format!("Failed to parse current open interest: {}", data[last_idx].sum_open_interest))?;
+		.context(format!("Failed to parse current open interest: {}", data[last_idx].sum_open_interest))?;
 
 	let previous = data[previous_idx]
 		.sum_open_interest
 		.parse::<f64>()
-		.with_context(|| format!("Failed to parse previous open interest: {}", data[previous_idx].sum_open_interest))?;
+		.context(format!("Failed to parse previous open interest: {}", data[previous_idx].sum_open_interest))?;
 
 	if previous == 0.0 {
 		return Ok(0.0);
 	}
 
 	let percent_change = ((current - previous) / previous) * 100.0;
-	Ok((percent_change * 100.0).round() / 100.0)
+	Ok(percent_change)
 }
