@@ -2,16 +2,16 @@ use serde::{Deserialize, Serialize};
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
 #[derive(Debug, Deserialize)]
-pub struct ForceOrderStream {
+pub(crate) struct ForceOrderStream {
 	#[serde(rename = "e")]
-	event_type: String,
+	pub event_type: String,
 	#[serde(rename = "E")]
-	event_time: u64,
+	pub event_time: u64,
 	#[serde(rename = "o")]
-	order: ForceOrderInfo,
+	pub order: ForceOrderInfo,
 }
 #[derive(Debug, Deserialize)]
-struct ForceOrderInfo {
+pub(crate) struct ForceOrderInfo {
 	#[serde(rename = "s")]
 	pub symbol: String,
 	#[serde(rename = "S")]

@@ -28,10 +28,18 @@ async fn main() -> anyhow::Result<()> {
 	let telegram_bot = TelegramBot::new(config.telegram);
 	info!("✅ Telegram bot initialized");
 
-	coinglass::login(&config.coinglass.login, &config.coinglass.password)?;
-	info!("✅ Successfully logged in to CoinGlass");
+	// coinglass::login(&config.coinglass.login, &config.coinglass.password)?;
+	// info!("✅ Successfully logged in to CoinGlass");
 
-	// let binance = BinanceExchange::new();
+	let binance = BinanceExchange::new();
+
+	binance
+		.watch_market_liquidations(|liq| {
+			if liq.usd_price > config.scanner.min_liquidation_usd_price {
+				println!("{} {} @ {:.2} {} {} {:.2}$", liq.symbol, liq.side, liq.price, liq.quantity, liq.time, liq.usd_price);
+			}
+		})
+		.await?;
 
 	// let test_symbol = "ZBTUSDT";
 

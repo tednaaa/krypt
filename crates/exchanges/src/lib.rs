@@ -4,7 +4,9 @@ pub use binance::BinanceExchange;
 
 #[async_trait::async_trait]
 pub trait Exchange {
-	async fn watch_market_liquidations(&self) -> anyhow::Result<MarketLiquidationsInfo>;
+	async fn watch_market_liquidations<F>(&self, callback: F) -> anyhow::Result<()>
+	where
+		F: FnMut(MarketLiquidationsInfo) + Send;
 	async fn get_open_interest_info(&self, symbol: &str) -> anyhow::Result<OpenInterestInfo>;
 	async fn get_funding_rate_info(&self, symbol: &str) -> anyhow::Result<FundingRateInfo>;
 }
@@ -13,9 +15,10 @@ pub trait Exchange {
 pub struct MarketLiquidationsInfo {
 	pub symbol: String,
 	pub side: String,
-	pub price: String,
-	pub quantity: String,
-	pub time: String,
+	pub price: f64,
+	pub usd_price: f64,
+	pub quantity: f64,
+	pub time: u64,
 }
 
 #[derive(Debug)]
