@@ -15,6 +15,8 @@ pub struct ScannerConfig {
 	pub volume_multiplier: f64,
 	pub min_window_mins: u64,
 	pub max_window_mins: u64,
+	pub min_liquidation_usd_price: f64,
+	pub min_trading_usd_volume: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]

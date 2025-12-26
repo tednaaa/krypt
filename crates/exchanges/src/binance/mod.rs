@@ -1,12 +1,22 @@
+use futures_util::{SinkExt, StreamExt};
+use tokio::time::{Duration, Instant};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tracing::error;
+
 use crate::{
-	Exchange,
-	binance::api_schemes::{FundingRateHistoryRequestParams, OpenInterestStatisticsRequestParams},
+	Exchange, MarketLiquidationsInfo,
+	binance::api_schemes::{ForceOrderStream, FundingRateHistoryRequestParams, OpenInterestStatisticsRequestParams},
 };
 use anyhow::{Context, bail};
 use api_schemes::{FundingRateHistoryResponse, OpenInterestStatisticsResponse};
 mod api_schemes;
 
 const BINANCE_FUTURES_API_BASE: &str = "https://fapi.binance.com";
+
+const WS_URL: &str = "wss://fstream.binance.com/ws/!forceOrder@arr";
+const HOURS_24: Duration = Duration::from_secs(24 * 60 * 60);
+const PING_EVERY: Duration = Duration::from_secs(60);
+const PONG_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub struct BinanceExchange {
 	client: reqwest::Client,
@@ -27,6 +37,18 @@ impl Default for BinanceExchange {
 
 #[async_trait::async_trait]
 impl Exchange for BinanceExchange {
+	async fn watch_market_liquidations<F>(&self, mut callback: F) -> anyhow::Result<()>
+	where
+		F: FnMut(MarketLiquidationsInfo) + Send,
+	{
+		loop {
+			if let Err(e) = run_stream(&mut callback).await {
+				error!("Stream error: {}, reconnecting in 5s...", e);
+				tokio::time::sleep(Duration::from_secs(5)).await;
+			}
+		}
+	}
+
 	async fn get_funding_rate_info(&self, symbol: &str) -> anyhow::Result<crate::FundingRateInfo> {
 		let url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/fundingRate");
 		let response: Vec<FundingRateHistoryResponse> = self
@@ -149,4 +171,69 @@ fn calculate_percent_change(data: &[OpenInterestStatisticsResponse], offset: usi
 
 	let percent_change = ((current - previous) / previous) * 100.0;
 	Ok(percent_change)
+}
+
+async fn run_stream<F>(callback: &mut F) -> anyhow::Result<()>
+where
+	F: FnMut(MarketLiquidationsInfo),
+{
+	let (ws, _) = connect_async(WS_URL).await.context("Failed to connect")?;
+	let (mut tx, mut rx) = ws.split();
+
+	let start = Instant::now();
+	let mut last_ping = Instant::now();
+	let mut last_pong = Instant::now();
+
+	loop {
+		if start.elapsed() >= HOURS_24 {
+			let _ = tx.send(Message::Close(None)).await;
+			return Ok(());
+		}
+
+		if last_ping.elapsed() >= PING_EVERY {
+			tx.send(Message::Ping(vec![].into())).await?;
+			last_ping = Instant::now();
+		}
+
+		if last_pong.elapsed() > PONG_TIMEOUT {
+			return Err(anyhow::anyhow!("Server timeout"));
+		}
+
+		match tokio::time::timeout(Duration::from_secs(30), rx.next()).await {
+			Ok(Some(Ok(Message::Text(text)))) => {
+				if let Ok(info) = parse_liquidation(&text) {
+					callback(info);
+				}
+			},
+			Ok(Some(Ok(Message::Pong(_)))) => last_pong = Instant::now(),
+			Ok(Some(Ok(Message::Ping(p)))) => {
+				tx.send(Message::Pong(p)).await?;
+				last_pong = Instant::now();
+			},
+			Ok(Some(Ok(Message::Close(_)))) => return Ok(()),
+			Ok(Some(Ok(Message::Binary(_)))) => continue,
+			Ok(Some(Ok(Message::Frame(_)))) => continue,
+			Ok(Some(Err(e))) => return Err(e.into()),
+			Ok(None) => return Ok(()),
+			Err(_) => continue,
+		}
+	}
+}
+
+fn parse_liquidation(text: &str) -> anyhow::Result<MarketLiquidationsInfo> {
+	let data: ForceOrderStream = serde_json::from_str(text)?;
+	let price = data.order.price.parse::<f64>()
+		.context(format!("Failed to parse price: {}", data.order.price))?;
+	let quantity = data.order.original_quantity.parse::<f64>()
+		.context(format!("Failed to parse quantity: {}", data.order.original_quantity))?;
+	let usd_price = price * price;
+
+	Ok(MarketLiquidationsInfo {
+		symbol: data.order.symbol,
+		side: data.order.side,
+		price,
+		usd_price,
+		quantity,
+		time: data.event_time,
+	})
 }
