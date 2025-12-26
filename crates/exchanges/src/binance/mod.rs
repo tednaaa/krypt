@@ -27,6 +27,8 @@ impl Default for BinanceExchange {
 
 #[async_trait::async_trait]
 impl Exchange for BinanceExchange {
+	async fn watch_market_liquidations(&self) -> anyhow::Result<crate::MarketLiquidationsInfo> {}
+
 	async fn get_funding_rate_info(&self, symbol: &str) -> anyhow::Result<crate::FundingRateInfo> {
 		let url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/fundingRate");
 		let response: Vec<FundingRateHistoryResponse> = self

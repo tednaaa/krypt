@@ -1,5 +1,41 @@
 use serde::{Deserialize, Serialize};
 
+// https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
+#[derive(Debug, Deserialize)]
+pub struct ForceOrderStream {
+	#[serde(rename = "e")]
+	event_type: String,
+	#[serde(rename = "E")]
+	event_time: u64,
+	#[serde(rename = "o")]
+	order: ForceOrderInfo,
+}
+#[derive(Debug, Deserialize)]
+struct ForceOrderInfo {
+	#[serde(rename = "s")]
+	pub symbol: String,
+	#[serde(rename = "S")]
+	pub side: String,
+	#[serde(rename = "o")]
+	pub order_type: String,
+	#[serde(rename = "f")]
+	pub time_in_force: String,
+	#[serde(rename = "q")]
+	pub original_quantity: String,
+	#[serde(rename = "p")]
+	pub price: String,
+	#[serde(rename = "ap")]
+	pub average_price: String,
+	#[serde(rename = "X")]
+	pub order_status: String,
+	#[serde(rename = "l")]
+	pub order_last_filled_quantity: String,
+	#[serde(rename = "z")]
+	pub order_filled_accumulated_quantity: String,
+	#[serde(rename = "T")]
+	pub order_trade_time: u64,
+}
+
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/All-Market-Tickers-Streams
 #[derive(Deserialize)]
 pub(crate) struct DailyTickerStream {
