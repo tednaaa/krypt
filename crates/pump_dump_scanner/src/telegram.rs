@@ -1,7 +1,7 @@
 use exchanges::{FundingRateInfo, OpenInterestInfo};
 use teloxide::{
 	prelude::*,
-	types::{MessageId, ParseMode, ThreadId},
+	types::{InputFile, MediaPhoto, MessageId, ParseMode, ThreadId},
 };
 
 use crate::config::TelegramConfig;
@@ -13,7 +13,6 @@ pub struct TelegramBot {
 
 pub struct TokenAlert {
 	pub symbol: String,
-	pub funding_rate_info: FundingRateInfo,
 	pub open_interest_info: OpenInterestInfo,
 }
 
@@ -23,9 +22,12 @@ impl TelegramBot {
 		Self { bot, config }
 	}
 
-	pub async fn send_alert(&self, token: &TokenAlert) -> anyhow::Result<()> {
+	pub async fn send_alert(&self, token: &TokenAlert, chart_screenshot: Vec<u8>) -> anyhow::Result<()> {
 		let chat_id = self.config.chat_id.clone();
-		let mut request = self.bot.send_message(chat_id, self.format_alert_message(token)).parse_mode(ParseMode::Html);
+		let caption = self.format_alert_message(token);
+
+		let mut request =
+			self.bot.send_photo(chat_id, InputFile::memory(chart_screenshot)).caption(caption).parse_mode(ParseMode::Html);
 
 		if let Some(thread_id) = self.config.thread_id {
 			request = request.message_thread_id(ThreadId(MessageId(thread_id)));
@@ -37,27 +39,13 @@ impl TelegramBot {
 	}
 
 	fn format_alert_message(&self, token: &TokenAlert) -> String {
-		let funding = &token.funding_rate_info;
-
-		let sections = [
-			self.format_header(token),
-			self.format_funding_info(funding),
-			self.format_market_stats(token),
-			self.format_footer(&token.symbol),
-		];
+		let sections = [self.format_header(token), self.format_market_stats(token), self.format_footer(&token.symbol)];
 
 		sections.join("\n\n")
 	}
 
 	fn format_header(&self, token: &TokenAlert) -> String {
 		format!("🔔 Токен <code>{}</code>", token.symbol)
-	}
-
-	fn format_funding_info(&self, funding: &FundingRateInfo) -> String {
-		format!(
-			"📊 <b>Funding:</b> <code>{:.8}</code> (avg: <code>{:.8}</code>)",
-			funding.funding_rate, funding.average_funding_rate
-		)
 	}
 
 	fn format_market_stats(&self, token: &TokenAlert) -> String {
@@ -70,7 +58,7 @@ impl TelegramBot {
 		};
 
 		format!(
-			"<code>📈 Open Interest</code>\n\
+			"📈 Open Interest\n\
 			{}\n\
 			{}\n\
 			{}\n\

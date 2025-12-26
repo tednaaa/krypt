@@ -16,11 +16,12 @@ cast_precision_loss = "allow"
 similar_names = "allow"
 
 [workspace]
-members = ["crates/exchanges", "crates/pump_dump_scanner"]
+members = ["crates/coinglass", "crates/exchanges", "crates/pump_dump_scanner"]
 resolver = "3"
 
 [workspace.dependencies]
 exchanges = { path = "crates/exchanges" }
+coinglass = { path = "crates/coinglass" }
 
 # External
 tokio = { version = "1.48.0", features = ["full"] }
