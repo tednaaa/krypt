@@ -86,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
 
 	binance_stream
 		.watch_market_liquidations(move |liquidation| {
-			if config.scanner.big_tokens.contains(&liquidation.symbol)
+			if config.scanner.big_tokens.contains(&extract_coin_from_pair(&liquidation.symbol).to_string())
 				&& liquidation.usd_price < config.scanner.big_tokens_min_liquidation_usd_price
 			{
 				return;
