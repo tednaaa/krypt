@@ -14,17 +14,21 @@ pub struct Coinglass {
 impl Coinglass {
 	pub fn new() -> anyhow::Result<Self> {
 		let launch_options = LaunchOptions::default_builder()
-	    .headless(true)
-	    .window_size(Some((1920, 1920)))
-	    .args(vec![
-	       OsStr::new("--headless=new"),
-	        OsStr::new("--no-sandbox"),
-	        OsStr::new("--disable-setuid-sandbox"),
-	        OsStr::new("--disable-infobars"),
-	        OsStr::new("--disable-blink-features=AutomationControlled"),
-	        OsStr::new("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
-	    ])
-	    .build()?;
+			.headless(true)
+			// headless_chrome drops the WebSocket connection if no events are received for
+			// `idle_browser_timeout` (defaults to 30s). This scanner can be idle for minutes
+			// between alerts, so use a long timeout to keep Chrome alive.
+			.idle_browser_timeout(Duration::from_secs(60 * 60 * 24))
+			.window_size(Some((1920, 1920)))
+			.args(vec![
+				OsStr::new("--headless=new"),
+				OsStr::new("--no-sandbox"),
+				OsStr::new("--disable-setuid-sandbox"),
+				OsStr::new("--disable-infobars"),
+				OsStr::new("--disable-blink-features=AutomationControlled"),
+				OsStr::new("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"),
+			])
+			.build()?;
 
 		let browser = Browser::new(launch_options)?;
 		let tab = browser.new_tab()?;
