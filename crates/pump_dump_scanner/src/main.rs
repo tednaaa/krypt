@@ -29,10 +29,11 @@ async fn main() -> anyhow::Result<()> {
 	let telegram_bot = TelegramBot::new(config.telegram);
 	info!("✅ Telegram bot initialized");
 
-	// coinglass::login(&config.coinglass.login, &config.coinglass.password)?;
-	// info!("✅ Successfully logged in to CoinGlass");
+	let coinglass = Coinglass::new()?;
+	info!("✅ Coinglass initialized");
 
 	let binance = BinanceExchange::new();
+	info!("✅ Binance exchange initialized");
 
 	binance
 		.watch_market_liquidations(|liquidation| {
@@ -43,8 +44,6 @@ async fn main() -> anyhow::Result<()> {
 		.await?;
 
 	// let test_symbol = "LIGHTUSDT";
-
-	// let coinglass = Coinglass::new()?;
 
 	// let liquidation_heatmap_screenshot =
 	// 	coinglass.get_liquidation_heatmap_screenshot(utils::extract_coin_from_pair(test_symbol))?;
