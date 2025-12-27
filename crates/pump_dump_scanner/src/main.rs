@@ -50,12 +50,6 @@ async fn main() -> anyhow::Result<()> {
 			let symbol = liquidation_info.symbol.clone();
 			let coin = utils::extract_coin_from_pair(&symbol);
 
-			if config.scanner.big_tokens.contains(&symbol)
-				&& liquidation_info.usd_price < config.scanner.big_tokens_min_liquidation_usd_price
-			{
-				continue;
-			}
-
 			// Coinglass screenshot is a blocking operation; avoid blocking the async runtime.
 			let liquidation_heatmap_screenshot =
 				tokio::task::block_in_place(|| coinglass.get_liquidation_heatmap_screenshot(coin));
@@ -92,6 +86,12 @@ async fn main() -> anyhow::Result<()> {
 
 	binance_stream
 		.watch_market_liquidations(move |liquidation| {
+			if config.scanner.big_tokens.contains(&liquidation.symbol)
+				&& liquidation.usd_price < config.scanner.big_tokens_min_liquidation_usd_price
+			{
+				return;
+			}
+
 			if liquidation.usd_price >= min_liquidation_usd_price {
 				match alert_tx.try_send(liquidation) {
 					Ok(()) => {},
