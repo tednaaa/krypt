@@ -1,5 +1,5 @@
 use anyhow::Context;
-use coinglass::login;
+use coinglass::Coinglass;
 use exchanges::{BinanceExchange, Exchange};
 use tracing::info;
 
@@ -10,6 +10,7 @@ use crate::{
 
 mod config;
 mod telegram;
+mod utils;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -33,22 +34,32 @@ async fn main() -> anyhow::Result<()> {
 
 	let binance = BinanceExchange::new();
 
-	binance
-		.watch_market_liquidations(|liq| {
-			if liq.usd_price > config.scanner.min_liquidation_usd_price {
-				println!("{} {} @ {:.2} {} {} {:.2}$", liq.symbol, liq.side, liq.price, liq.quantity, liq.time, liq.usd_price);
-			}
-		})
-		.await?;
+	// binance
+	// 	.watch_market_liquidations(|liq| {
+	// 		if liq.usd_price > config.scanner.min_liquidation_usd_price {
+	// 			println!("{} {} @ {:.2} {} {} {:.2}$", liq.symbol, liq.side, liq.price, liq.quantity, liq.time, liq.usd_price);
+	// 		}
+	// 	})
+	// 	.await?;
 
-	// let test_symbol = "ZBTUSDT";
+	let test_symbol = "LIGHTUSDT";
 
-	// let open_interest_info = binance.get_open_interest_info(test_symbol).await?;
+	let coinglass = Coinglass::new()?;
+
+	let liquidation_heatmap_screenshot =
+		coinglass.get_liquidation_heatmap_screenshot(utils::extract_coin_from_pair(test_symbol))?;
 	// let chart_screenshot = coinglass::get_chart_screenshot(test_symbol)?;
 
-	// let token_alert = TokenAlert { symbol: String::from(test_symbol), open_interest_info };
+	let open_interest_info = binance.get_open_interest_info(test_symbol).await?;
 
-	// telegram_bot.send_alert(&token_alert, chart_screenshot).await?;
+	let token_alert = TokenAlert {
+		symbol: String::from(test_symbol),
+		open_interest_info,
+		chart_screenshot: None,
+		liquidation_heatmap_screenshot: Some(liquidation_heatmap_screenshot),
+	};
+
+	telegram_bot.send_alert(&token_alert).await?;
 
 	Ok(())
 }
