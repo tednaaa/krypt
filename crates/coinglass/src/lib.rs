@@ -15,7 +15,7 @@ impl Coinglass {
 	pub fn new() -> anyhow::Result<Self> {
 		let launch_options = LaunchOptions::default_builder()
 	    .headless(true)
-	    .window_size(Some((1920, 1080)))
+	    .window_size(Some((1920, 1920)))
 	    .args(vec![
 	       OsStr::new("--headless=new"),
 	        OsStr::new("--no-sandbox"),
@@ -81,8 +81,6 @@ impl Coinglass {
 			.wait_for_element("canvas")?
 			.get_box_model()?
 			.margin_viewport();
-
-		// thread::sleep(Duration::from_secs(10));
 
 		let screenshot = self.tab.capture_screenshot(CaptureScreenshotFormatOption::Jpeg, None, Some(viewport), true)?;
 
