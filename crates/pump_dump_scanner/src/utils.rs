@@ -1,4 +1,4 @@
-pub(crate) fn extract_coin_from_pair(pair: &str) -> &str {
+pub fn extract_coin_from_pair(pair: &str) -> &str {
 	pair.strip_suffix("USDT").unwrap_or(pair)
 }
 
