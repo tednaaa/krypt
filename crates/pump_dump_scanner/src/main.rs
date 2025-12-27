@@ -1,4 +1,5 @@
 use anyhow::Context;
+use coinglass::Coinglass;
 use exchanges::{BinanceExchange, Exchange};
 use tracing::info;
 
@@ -41,10 +42,12 @@ async fn main() -> anyhow::Result<()> {
 	// 	})
 	// 	.await?;
 
-	let test_symbol = "ZBTUSDT";
+	let test_symbol = "LIGHTUSDT";
+
+	let coinglass = Coinglass::new()?;
 
 	let liquidation_heatmap_screenshot =
-		coinglass::get_liquidation_heatmap_screenshot(utils::extract_coin_from_pair(test_symbol))?;
+		coinglass.get_liquidation_heatmap_screenshot(utils::extract_coin_from_pair(test_symbol))?;
 	// let chart_screenshot = coinglass::get_chart_screenshot(test_symbol)?;
 
 	let open_interest_info = binance.get_open_interest_info(test_symbol).await?;
