@@ -11,12 +11,9 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScannerConfig {
-	pub price_change_percent: f64,
-	pub volume_multiplier: f64,
-	pub min_window_mins: u64,
-	pub max_window_mins: u64,
 	pub min_liquidation_usd_price: f64,
-	pub min_trading_usd_volume: f64,
+	pub big_tokens: Vec<String>,
+	pub big_tokens_min_liquidation_usd_price: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -38,28 +35,6 @@ impl Config {
 
 		let config: Self = toml::from_str(&content).context("Failed to parse config file")?;
 
-		config.validate()?;
-
 		Ok(config)
-	}
-
-	fn validate(&self) -> anyhow::Result<()> {
-		if self.telegram.bot_token.is_empty() {
-			anyhow::bail!("Please set a valid Telegram bot token in config.toml");
-		}
-
-		if self.telegram.chat_id.is_empty() {
-			anyhow::bail!("Please set a valid Telegram chat ID in config.toml");
-		}
-
-		if self.scanner.price_change_percent <= 0.0 {
-			anyhow::bail!("pump/dump price_change_percent must be positive");
-		}
-
-		if self.scanner.volume_multiplier <= 1.0 {
-			anyhow::bail!("pump volume_multiplier must be greater than 1.0");
-		}
-
-		Ok(())
 	}
 }

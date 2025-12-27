@@ -15,7 +15,7 @@ pub trait Exchange {
 pub struct MarketLiquidationsInfo {
 	pub symbol: String,
 	pub side: String,
-	pub price: f64,
+	pub symbol_price: f64,
 	pub usd_price: f64,
 	pub quantity: f64,
 	pub time: u64,

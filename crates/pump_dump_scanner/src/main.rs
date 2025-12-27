@@ -1,11 +1,13 @@
 use anyhow::Context;
 use coinglass::Coinglass;
-use exchanges::{BinanceExchange, Exchange};
-use tracing::info;
+use exchanges::{BinanceExchange, Exchange, MarketLiquidationsInfo};
+use tokio::sync::mpsc;
+use tracing::{error, info, warn};
 
 use crate::{
 	config::Config,
 	telegram::{TelegramBot, TokenAlert},
+	utils::extract_coin_from_pair,
 };
 
 mod config;
@@ -26,40 +28,83 @@ async fn main() -> anyhow::Result<()> {
 	let config = Config::load("config.toml").context("Failed to load configuration")?;
 	info!("✅ Configuration loaded");
 
+	let min_liquidation_usd_price = config.scanner.min_liquidation_usd_price;
+
 	let telegram_bot = TelegramBot::new(config.telegram);
 	info!("✅ Telegram bot initialized");
 
-	// coinglass::login(&config.coinglass.login, &config.coinglass.password)?;
-	// info!("✅ Successfully logged in to CoinGlass");
-
-	let binance = BinanceExchange::new();
-
-	// binance
-	// 	.watch_market_liquidations(|liq| {
-	// 		if liq.usd_price > config.scanner.min_liquidation_usd_price {
-	// 			println!("{} {} @ {:.2} {} {} {:.2}$", liq.symbol, liq.side, liq.price, liq.quantity, liq.time, liq.usd_price);
-	// 		}
-	// 	})
-	// 	.await?;
-
-	let test_symbol = "LIGHTUSDT";
-
 	let coinglass = Coinglass::new()?;
+	info!("✅ Coinglass initialized");
 
-	let liquidation_heatmap_screenshot =
-		coinglass.get_liquidation_heatmap_screenshot(utils::extract_coin_from_pair(test_symbol))?;
-	// let chart_screenshot = coinglass::get_chart_screenshot(test_symbol)?;
+	// Use separate clients: one for the WS stream and one for REST calls in the alert worker.
+	let binance_stream = BinanceExchange::new();
+	let binance_rest = BinanceExchange::new();
+	info!("✅ Binance exchange initialized");
 
-	let open_interest_info = binance.get_open_interest_info(test_symbol).await?;
+	// Keep the stream callback synchronous/cheap: forward events to an async worker.
+	// Bounded channel prevents unbounded backlog if the stream is noisy.
+	let (alert_tx, mut alert_rx) = mpsc::channel::<MarketLiquidationsInfo>(128);
 
-	let token_alert = TokenAlert {
-		symbol: String::from(test_symbol),
-		open_interest_info,
-		chart_screenshot: None,
-		liquidation_heatmap_screenshot: Some(liquidation_heatmap_screenshot),
-	};
+	tokio::spawn(async move {
+		while let Some(liquidation_info) = alert_rx.recv().await {
+			let symbol = liquidation_info.symbol.clone();
+			let coin = utils::extract_coin_from_pair(&symbol);
 
-	telegram_bot.send_alert(&token_alert).await?;
+			if config.scanner.big_tokens.contains(&symbol)
+				&& liquidation_info.usd_price < config.scanner.big_tokens_min_liquidation_usd_price
+			{
+				continue;
+			}
+
+			// Coinglass screenshot is a blocking operation; avoid blocking the async runtime.
+			let liquidation_heatmap_screenshot =
+				tokio::task::block_in_place(|| coinglass.get_liquidation_heatmap_screenshot(coin));
+
+			let liquidation_heatmap_screenshot = match liquidation_heatmap_screenshot {
+				Ok(screenshot) => screenshot,
+				Err(e) => {
+					error!("Failed to get liquidation heatmap screenshot for {}: {}", symbol, e);
+					warn!("Skipping alert for {symbol}: no liquidation heatmap screenshot available");
+					continue;
+				},
+			};
+
+			let open_interest_info = match binance_rest.get_open_interest_info(&symbol).await {
+				Ok(info) => info,
+				Err(e) => {
+					error!("Failed to get open interest info for {}: {}", symbol, e);
+					continue;
+				},
+			};
+
+			let token_alert = TokenAlert {
+				symbol: extract_coin_from_pair(&symbol).to_string(),
+				open_interest_info,
+				liquidation_info,
+				liquidation_heatmap_screenshot,
+			};
+
+			if let Err(e) = telegram_bot.send_alert(&token_alert).await {
+				error!("Failed to send alert for {}: {}", token_alert.liquidation_info.symbol, e);
+			}
+		}
+	});
+
+	binance_stream
+		.watch_market_liquidations(move |liquidation| {
+			if liquidation.usd_price >= min_liquidation_usd_price {
+				match alert_tx.try_send(liquidation) {
+					Ok(()) => {},
+					Err(tokio::sync::mpsc::error::TrySendError::Full(liquidation)) => {
+						warn!("Alert queue is full; dropping alert for {}", liquidation.symbol);
+					},
+					Err(tokio::sync::mpsc::error::TrySendError::Closed(liquidation)) => {
+						warn!("Alert worker is down; dropping alert for {}", liquidation.symbol);
+					},
+				}
+			}
+		})
+		.await?;
 
 	Ok(())
 }

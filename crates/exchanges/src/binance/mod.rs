@@ -222,16 +222,18 @@ where
 
 fn parse_liquidation(text: &str) -> anyhow::Result<MarketLiquidationsInfo> {
 	let data: ForceOrderStream = serde_json::from_str(text)?;
-	let price = data.order.price.parse::<f64>()
-		.context(format!("Failed to parse price: {}", data.order.price))?;
-	let quantity = data.order.original_quantity.parse::<f64>()
+	let symbol_price = data.order.price.parse::<f64>().context(format!("Failed to parse price: {}", data.order.price))?;
+	let quantity = data
+		.order
+		.original_quantity
+		.parse::<f64>()
 		.context(format!("Failed to parse quantity: {}", data.order.original_quantity))?;
-	let usd_price = price * price;
+	let usd_price = symbol_price * quantity;
 
 	Ok(MarketLiquidationsInfo {
 		symbol: data.order.symbol,
 		side: data.order.side,
-		price,
+		symbol_price,
 		usd_price,
 		quantity,
 		time: data.event_time,
