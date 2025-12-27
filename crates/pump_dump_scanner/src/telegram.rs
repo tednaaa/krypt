@@ -1,7 +1,7 @@
-use exchanges::{FundingRateInfo, OpenInterestInfo};
+use exchanges::OpenInterestInfo;
 use teloxide::{
 	prelude::*,
-	types::{InputFile, MediaPhoto, MessageId, ParseMode, ThreadId},
+	types::{InputFile, MessageId, ParseMode, ThreadId},
 };
 
 use crate::config::TelegramConfig;
@@ -14,6 +14,8 @@ pub struct TelegramBot {
 pub struct TokenAlert {
 	pub symbol: String,
 	pub open_interest_info: OpenInterestInfo,
+	pub chart_screenshot: Option<Vec<u8>>,
+	pub liquidation_heatmap_screenshot: Option<Vec<u8>>,
 }
 
 impl TelegramBot {
@@ -22,12 +24,19 @@ impl TelegramBot {
 		Self { bot, config }
 	}
 
-	pub async fn send_alert(&self, token: &TokenAlert, chart_screenshot: Vec<u8>) -> anyhow::Result<()> {
+	pub async fn send_alert(&self, token: &TokenAlert) -> anyhow::Result<()> {
 		let chat_id = self.config.chat_id.clone();
 		let caption = self.format_alert_message(token);
 
+		// Determine which screenshot to use (prefer liquidation heatmap)
+		let screenshot = token
+			.liquidation_heatmap_screenshot
+			.as_ref()
+			.or(token.chart_screenshot.as_ref())
+			.ok_or_else(|| anyhow::anyhow!("No screenshot available for alert"))?;
+
 		let mut request =
-			self.bot.send_photo(chat_id, InputFile::memory(chart_screenshot)).caption(caption).parse_mode(ParseMode::Html);
+			self.bot.send_photo(chat_id, InputFile::memory(screenshot.clone())).parse_mode(ParseMode::Html).caption(caption);
 
 		if let Some(thread_id) = self.config.thread_id {
 			request = request.message_thread_id(ThreadId(MessageId(thread_id)));

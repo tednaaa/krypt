@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::thread;
 use std::time::Duration;
 
-use headless_chrome::protocol::cdp::Page;
+use headless_chrome::protocol::cdp::Page::{self, CaptureScreenshotFormatOption};
 use headless_chrome::{Browser, LaunchOptions};
 
 pub fn login(login: &str, password: &str) -> anyhow::Result<()> {
@@ -72,6 +72,28 @@ pub fn get_chart_screenshot(pair: &str) -> anyhow::Result<Vec<u8>> {
 		None, // clip rectangle (None = full page)
 		true, // from_surface (better quality)
 	)?;
+
+	Ok(screenshot)
+}
+
+pub fn get_liquidation_heatmap_screenshot(coin: &str) -> anyhow::Result<Vec<u8>> {
+	let launch_options = LaunchOptions::default_builder()
+		.window_size(Some((1920, 1080)))
+		.build()
+		.map_err(|error| anyhow::anyhow!("Failed to build LaunchOptions: {error}"))?;
+
+	let browser = Browser::new(launch_options)?;
+	let tab = browser.new_tab()?;
+
+	let viewport = tab
+		.navigate_to(&format!("https://www.coinglass.com/pro/futures/LiquidationHeatMap?type=pair&coin={coin}"))?
+		.wait_for_element("canvas")?
+		.get_box_model()?
+		.margin_viewport();
+
+	// thread::sleep(Duration::from_secs(3));
+
+	let screenshot = tab.capture_screenshot(CaptureScreenshotFormatOption::Jpeg, None, Some(viewport), true)?;
 
 	Ok(screenshot)
 }
