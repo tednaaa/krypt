@@ -1,4 +1,4 @@
-use exchanges::OpenInterestInfo;
+use exchanges::{MarketLiquidationsInfo, OpenInterestInfo};
 use teloxide::{
 	prelude::*,
 	types::{InputFile, MessageId, ParseMode, ThreadId},
@@ -12,10 +12,9 @@ pub struct TelegramBot {
 }
 
 pub struct TokenAlert {
-	pub symbol: String,
 	pub open_interest_info: OpenInterestInfo,
-	pub chart_screenshot: Option<Vec<u8>>,
-	pub liquidation_heatmap_screenshot: Option<Vec<u8>>,
+	pub liquidation_info: MarketLiquidationsInfo,
+	pub liquidation_heatmap_screenshot: Vec<u8>,
 }
 
 impl TelegramBot {
@@ -28,15 +27,11 @@ impl TelegramBot {
 		let chat_id = self.config.chat_id.clone();
 		let caption = self.format_alert_message(token);
 
-		// Determine which screenshot to use (prefer liquidation heatmap)
-		let screenshot = token
-			.liquidation_heatmap_screenshot
-			.as_ref()
-			.or(token.chart_screenshot.as_ref())
-			.ok_or_else(|| anyhow::anyhow!("No screenshot available for alert"))?;
-
-		let mut request =
-			self.bot.send_photo(chat_id, InputFile::memory(screenshot.clone())).parse_mode(ParseMode::Html).caption(caption);
+		let mut request = self
+			.bot
+			.send_photo(chat_id, InputFile::memory(token.liquidation_heatmap_screenshot.clone()))
+			.parse_mode(ParseMode::Html)
+			.caption(caption);
 
 		if let Some(thread_id) = self.config.thread_id {
 			request = request.message_thread_id(ThreadId(MessageId(thread_id)));
@@ -48,13 +43,30 @@ impl TelegramBot {
 	}
 
 	fn format_alert_message(&self, token: &TokenAlert) -> String {
-		let sections = [self.format_header(token), self.format_market_stats(token), self.format_footer(&token.symbol)];
+		let sections = [
+			self.format_header(token),
+			self.format_liquidation_info(token),
+			self.format_market_stats(token),
+			self.format_footer(&token.liquidation_info.symbol),
+		];
 
 		sections.join("\n\n")
 	}
 
 	fn format_header(&self, token: &TokenAlert) -> String {
-		format!("🔔 Токен <code>{}</code>", token.symbol)
+		format!("🔔 <code>{}</code> : {}", token.liquidation_info.symbol, token.liquidation_info.symbol_price)
+	}
+
+	fn format_liquidation_info(&self, token: &TokenAlert) -> String {
+		let liquidation = &token.liquidation_info;
+
+		let side_info = match liquidation.side.as_str() {
+			"BUY" => "longs 🟢",
+			"SELL" => "shorts 🔴",
+			_ => "unknown",
+		};
+
+		format!("💥 Liquidated {side_info}, {:.5}$", liquidation.usd_price)
 	}
 
 	fn format_market_stats(&self, token: &TokenAlert) -> String {
