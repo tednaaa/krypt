@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
 #[derive(Debug, Deserialize)]
-pub(crate) struct ForceOrderStream {
+#[allow(dead_code)]
+pub struct ForceOrderStream {
 	#[serde(rename = "e")]
 	pub event_type: String,
 	#[serde(rename = "E")]
@@ -11,7 +12,8 @@ pub(crate) struct ForceOrderStream {
 	pub order: ForceOrderInfo,
 }
 #[derive(Debug, Deserialize)]
-pub(crate) struct ForceOrderInfo {
+#[allow(dead_code)]
+pub struct ForceOrderInfo {
 	#[serde(rename = "s")]
 	pub symbol: String,
 	#[serde(rename = "S")]
@@ -38,7 +40,8 @@ pub(crate) struct ForceOrderInfo {
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/All-Market-Tickers-Streams
 #[derive(Deserialize)]
-pub(crate) struct DailyTickerStream {
+#[allow(dead_code)]
+pub struct DailyTickerStream {
 	#[serde(rename = "e")]
 	event_type: String,
 	#[serde(rename = "E")]
@@ -80,7 +83,7 @@ pub(crate) struct DailyTickerStream {
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-History
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct FundingRateHistoryRequestParams {
+pub struct FundingRateHistoryRequestParams {
 	pub symbol: String,
 	pub start_time: Option<u64>,
 	pub end_time: Option<u64>,
@@ -89,14 +92,14 @@ pub(crate) struct FundingRateHistoryRequestParams {
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct FundingRateHistoryResponse {
+pub struct FundingRateHistoryResponse {
 	pub funding_rate: String,
 }
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct OpenInterestStatisticsRequestParams {
+pub struct OpenInterestStatisticsRequestParams {
 	pub symbol: String,
 	/// 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d
 	pub period: String,
@@ -107,7 +110,8 @@ pub(crate) struct OpenInterestStatisticsRequestParams {
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct OpenInterestStatisticsResponse {
+#[allow(dead_code)]
+pub struct OpenInterestStatisticsResponse {
 	symbol: String,
 	pub sum_open_interest: String,
 	pub sum_open_interest_value: String,
@@ -119,7 +123,8 @@ pub(crate) struct OpenInterestStatisticsResponse {
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct KlineCandlestickRequestParams {
+#[allow(dead_code)]
+pub struct KlineCandlestickRequestParams {
 	symbol: String,
 	/// 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
 	interval: String,
@@ -128,7 +133,8 @@ pub(crate) struct KlineCandlestickRequestParams {
 	start_time: Option<i64>,
 	end_time: Option<i64>,
 }
-pub(crate) type KlineCandlestickResponse = (
+#[allow(dead_code)]
+pub type KlineCandlestickResponse = (
 	u64,    // Open time
 	String, // Open
 	String, // High
@@ -146,7 +152,8 @@ pub(crate) type KlineCandlestickResponse = (
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Long-Short-Ratio
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LongShortRatioRequestParams {
+#[allow(dead_code)]
+pub struct LongShortRatioRequestParams {
 	pub symbol: String,
 	/// 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d
 	pub period: String,
@@ -157,7 +164,8 @@ pub(crate) struct LongShortRatioRequestParams {
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LongShortRatioResponse {
+#[allow(dead_code)]
+pub struct LongShortRatioResponse {
 	pub symbol: String,
 	pub long_short_ratio: String,
 	pub long_account: String,

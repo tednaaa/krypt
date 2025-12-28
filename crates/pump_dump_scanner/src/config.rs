@@ -6,6 +6,7 @@ use std::fs;
 pub struct Config {
 	pub scanner: ScannerConfig,
 	pub telegram: TelegramConfig,
+	#[allow(dead_code)]
 	pub coinglass: CoinglassConfig,
 }
 
@@ -24,6 +25,7 @@ pub struct TelegramConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct CoinglassConfig {
 	pub login: String,
 	pub password: String,

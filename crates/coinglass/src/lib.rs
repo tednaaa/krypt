@@ -7,6 +7,7 @@ use headless_chrome::protocol::cdp::Page::{self, CaptureScreenshotFormatOption};
 use headless_chrome::{Browser, LaunchOptions, Tab};
 
 pub struct Coinglass {
+	#[allow(dead_code)]
 	browser: Browser,
 	tab: Arc<Tab>,
 }

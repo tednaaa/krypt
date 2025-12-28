@@ -210,12 +210,9 @@ where
 				tx.send(Message::Pong(p)).await?;
 				last_pong = Instant::now();
 			},
-			Ok(Some(Ok(Message::Close(_)))) => return Ok(()),
-			Ok(Some(Ok(Message::Binary(_)))) => continue,
-			Ok(Some(Ok(Message::Frame(_)))) => continue,
+			Ok(Some(Ok(Message::Close(_))) | None) => return Ok(()),
 			Ok(Some(Err(e))) => return Err(e.into()),
-			Ok(None) => return Ok(()),
-			Err(_) => continue,
+			_ => {},
 		}
 	}
 }
