@@ -21,7 +21,21 @@ pub struct TokenAlert {
 impl TelegramBot {
 	pub fn new(config: TelegramConfig) -> Self {
 		let bot = Bot::new(&config.bot_token);
+
 		Self { bot, config }
+	}
+
+	#[allow(dead_code)]
+	pub async fn hello(&self) -> anyhow::Result<()> {
+		let mut request = self.bot.send_message(self.config.chat_id.clone(), "Hello!");
+
+		if let Some(thread_id) = self.config.thread_id {
+			request = request.message_thread_id(ThreadId(MessageId(thread_id)));
+		}
+
+		request.await?;
+
+		Ok(())
 	}
 
 	pub async fn send_alert(&self, token: &TokenAlert) -> anyhow::Result<()> {
