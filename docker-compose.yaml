@@ -1,68 +1,60 @@
+networks:
+  loki:
+
 services:
-  krypt:
-    image: ghcr.io/tednaaa/krypt:v1.0.0
-    restart: unless-stopped
+  pump_dump_scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile
     volumes:
-      - ./config.toml:/app/config.toml:ro
-    logging:
-      driver: loki
-      options:
-        loki-url: "http://localhost:3100/loki/api/v1/push"
-        loki-batch-size: "400"
-        loki-retries: "2"
-        loki-max-backoff: "1s"
-        loki-timeout: "1s"
-        mode: non-blocking
-        max-buffer-size: 4m
-    networks:
-      - monitoring
+      - type: bind
+        source: ./config.toml
+        target: /app/config.toml
+        read_only: true
 
   loki:
     image: grafana/loki:latest
-    restart: unless-stopped
     ports:
       - "3100:3100"
-    volumes:
-      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
-      - loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
     networks:
-      - monitoring
+      - loki
 
   promtail:
     image: grafana/promtail:latest
-    restart: unless-stopped
     volumes:
-      - ./promtail-config.yml:/etc/promtail/config.yml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/log:/var/log
     command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      - loki
     networks:
-      - monitoring
+      - loki
 
   grafana:
-    image: grafana/grafana:latest
-    restart: unless-stopped
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin # Change this!
-      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_FEATURE_TOGGLES_ENABLE=alertingSimplifiedRouting,alertingQueryAndExpressionsStepMode
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          orgId: 1
+          url: http://loki:3100
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+        EOF
+        /run.sh
+    image: grafana/grafana:latest
     ports:
       - "3000:3000"
-    depends_on:
-      - loki
     networks:
-      - monitoring
-
-volumes:
-  loki_data:
-  grafana_data:
-
-networks:
-  monitoring:
-    driver: bridge
+      - loki
