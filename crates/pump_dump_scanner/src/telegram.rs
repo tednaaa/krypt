@@ -6,6 +6,7 @@ use teloxide::{
 
 use crate::config::TelegramConfig;
 
+#[derive(Clone)]
 pub struct TelegramBot {
 	bot: Bot,
 	config: TelegramConfig,
@@ -16,6 +17,18 @@ pub struct TokenAlert {
 	pub open_interest_info: OpenInterestInfo,
 	pub liquidation_info: MarketLiquidationsInfo,
 	pub liquidation_heatmap_screenshot: Vec<u8>,
+}
+
+pub struct MarketTickerAlert {
+	pub symbol: String,
+	pub direction: String,
+	pub window_minutes: u64,
+	pub percent_change_window: f64,
+	pub price_now: f64,
+	pub quote_volume_window: f64,
+	pub quote_volume_24h: f64,
+	pub volume_multiplier: f64,
+	pub volume_tier: f64,
 }
 
 impl TelegramBot {
@@ -54,6 +67,20 @@ impl TelegramBot {
 
 		request.await.map_err(|error| anyhow::anyhow!("Failed to send alert: {error}"))?;
 
+		Ok(())
+	}
+
+	pub async fn send_market_ticker_alert(&self, alert: &MarketTickerAlert) -> anyhow::Result<()> {
+		let chat_id = self.config.chat_id.clone();
+		let text = self.format_market_ticker_alert_message(alert);
+
+		let mut request = self.bot.send_message(chat_id, text).parse_mode(ParseMode::Html);
+
+		if let Some(thread_id) = self.config.thread_id {
+			request = request.message_thread_id(ThreadId(MessageId(thread_id)));
+		}
+
+		request.await.map_err(|error| anyhow::anyhow!("Failed to send market ticker alert: {error}"))?;
 		Ok(())
 	}
 
@@ -108,5 +135,29 @@ impl TelegramBot {
 
 	fn format_footer(&self, symbol: &str) -> String {
 		format!(r#"📊 <a href="https://www.coinglass.com/tv/Binance_{symbol}">Coinglass</a>"#)
+	}
+
+	fn format_market_ticker_alert_message(&self, alert: &MarketTickerAlert) -> String {
+		let sign = if alert.percent_change_window >= 0.0 { "+" } else { "" };
+		let vol_m = alert.volume_multiplier;
+		let tier = alert.volume_tier;
+
+		// Keep it HTML-safe by using only simple tags and code blocks.
+		// Symbol is from exchange; still treat as plain text inside <code>.
+		let header = format!(
+			"🔔 <b>{}</b> <code>{}</code> | <b>{}{:.2}%</b> ({}m)",
+			alert.direction, alert.symbol, sign, alert.percent_change_window, alert.window_minutes
+		);
+
+		let stats = format!(
+			"💰 Price: <code>{:.6}</code>\n\
+			📊 Volume ({}m est.): <code>{:.0} USDT</code> | <b>x{:.1}</b> (tier x{:.0})\n\
+			🧾 Volume (24h): <code>{:.0} USDT</code>",
+			alert.price_now, alert.window_minutes, alert.quote_volume_window, vol_m, tier, alert.quote_volume_24h
+		);
+
+		let link = format!(r#"🔗 <a href="https://www.binance.com/en/futures/{}">Binance Futures</a>"#, alert.symbol);
+
+		format!("{header}\n\n{stats}\n\n{link}")
 	}
 }

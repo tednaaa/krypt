@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/All-Market-Tickers-Streams
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct TickerStream {
 	#[serde(rename = "e")]
 	pub event_type: String,

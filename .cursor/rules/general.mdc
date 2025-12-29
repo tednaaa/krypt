@@ -2,7 +2,7 @@
 alwaysApply: true
 ---
 
-- Write clean, readable code with clear variable names
+- Write clean code, follow project structure
 - Keep functions small and focused on a single responsibility
 - Add comments for complex logic, but prefer self-documenting code
 - Prefer composition over inheritance
