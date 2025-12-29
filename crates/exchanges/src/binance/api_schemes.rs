@@ -1,5 +1,46 @@
 use serde::{Deserialize, Serialize};
 
+// https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/All-Market-Tickers-Streams
+#[derive(Debug, Deserialize)]
+pub struct TickerStream {
+	#[serde(rename = "e")]
+	pub event_type: String,
+	#[serde(rename = "E")]
+	pub event_time: u64,
+	#[serde(rename = "s")]
+	pub symbol: String,
+	#[serde(rename = "p")]
+	pub price_change: String,
+	#[serde(rename = "P")]
+	pub price_change_percent: String,
+	#[serde(rename = "w")]
+	pub weighted_average_price: String,
+	#[serde(rename = "c")]
+	pub last_price: String,
+	#[serde(rename = "Q")]
+	pub last_quantity: String,
+	#[serde(rename = "o")]
+	pub open_price: String,
+	#[serde(rename = "h")]
+	pub high_price: String,
+	#[serde(rename = "l")]
+	pub low_price: String,
+	#[serde(rename = "v")]
+	pub total_traded_base_asset_volume: String,
+	#[serde(rename = "q")]
+	pub total_traded_quote_asset_volume: String,
+	#[serde(rename = "O")]
+	pub statistics_open_time: u64,
+	#[serde(rename = "C")]
+	pub statistics_close_time: u64,
+	#[serde(rename = "F")]
+	pub first_trade_id: u64,
+	#[serde(rename = "L")]
+	pub last_trade_id: u64,
+	#[serde(rename = "n")]
+	pub total_number_of_trades: u64,
+}
+
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -119,35 +160,6 @@ pub struct OpenInterestStatisticsResponse {
 	pub cmc_circulating_supply: String,
 	pub timestamp: i64,
 }
-
-// https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-pub struct KlineCandlestickRequestParams {
-	symbol: String,
-	/// 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
-	interval: String,
-	/// default 500, max 1500
-	limit: Option<i64>,
-	start_time: Option<i64>,
-	end_time: Option<i64>,
-}
-#[allow(dead_code)]
-pub type KlineCandlestickResponse = (
-	u64,    // Open time
-	String, // Open
-	String, // High
-	String, // Low
-	String, // Close
-	String, // Volume
-	u64,    // Close time
-	String, // Quote asset volume
-	u64,    // Number of trades
-	String, // Taker buy base asset volume
-	String, // Taker buy quote asset volume
-	String, // Ignore
-);
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Long-Short-Ratio
 #[derive(Serialize)]

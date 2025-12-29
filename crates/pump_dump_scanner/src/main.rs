@@ -39,70 +39,72 @@ async fn main() -> anyhow::Result<()> {
 	let binance_rest = BinanceExchange::new();
 	info!("✅ Binance exchange initialized");
 
+	binance_stream.watch_market_tickers(|data| println!("{data:?}")).await?;
+
 	// Keep the stream callback synchronous/cheap: forward events to an async worker.
 	// Bounded channel prevents unbounded backlog if the stream is noisy.
-	let (alert_tx, mut alert_rx) = mpsc::channel::<MarketLiquidationsInfo>(128);
+	// let (alert_tx, mut alert_rx) = mpsc::channel::<MarketLiquidationsInfo>(128);
 
-	tokio::spawn(async move {
-		while let Some(liquidation_info) = alert_rx.recv().await {
-			let symbol = liquidation_info.symbol.clone();
-			let coin = utils::extract_coin_from_pair(&symbol);
+	// tokio::spawn(async move {
+	// 	while let Some(liquidation_info) = alert_rx.recv().await {
+	// 		let symbol = liquidation_info.symbol.clone();
+	// 		let coin = utils::extract_coin_from_pair(&symbol);
 
-			// Coinglass screenshot is a blocking operation; avoid blocking the async runtime.
-			let liquidation_heatmap_screenshot =
-				tokio::task::block_in_place(|| coinglass.get_liquidation_heatmap_screenshot(coin));
+	// 		// Coinglass screenshot is a blocking operation; avoid blocking the async runtime.
+	// 		let liquidation_heatmap_screenshot =
+	// 			tokio::task::block_in_place(|| coinglass.get_liquidation_heatmap_screenshot(coin));
 
-			let liquidation_heatmap_screenshot = match liquidation_heatmap_screenshot {
-				Ok(screenshot) => screenshot,
-				Err(e) => {
-					error!("Failed to get liquidation heatmap screenshot for {}: {}", symbol, e);
-					warn!("Skipping alert for {symbol}: no liquidation heatmap screenshot available");
-					continue;
-				},
-			};
+	// 		let liquidation_heatmap_screenshot = match liquidation_heatmap_screenshot {
+	// 			Ok(screenshot) => screenshot,
+	// 			Err(e) => {
+	// 				error!("Failed to get liquidation heatmap screenshot for {}: {}", symbol, e);
+	// 				warn!("Skipping alert for {symbol}: no liquidation heatmap screenshot available");
+	// 				continue;
+	// 			},
+	// 		};
 
-			let open_interest_info = match binance_rest.get_open_interest_info(&symbol).await {
-				Ok(info) => info,
-				Err(e) => {
-					error!("Failed to get open interest info for {}: {}", symbol, e);
-					continue;
-				},
-			};
+	// 		let open_interest_info = match binance_rest.get_open_interest_info(&symbol).await {
+	// 			Ok(info) => info,
+	// 			Err(e) => {
+	// 				error!("Failed to get open interest info for {}: {}", symbol, e);
+	// 				continue;
+	// 			},
+	// 		};
 
-			let token_alert = TokenAlert {
-				symbol: extract_coin_from_pair(&symbol).to_string(),
-				open_interest_info,
-				liquidation_info,
-				liquidation_heatmap_screenshot,
-			};
+	// 		let token_alert = TokenAlert {
+	// 			symbol: extract_coin_from_pair(&symbol).to_string(),
+	// 			open_interest_info,
+	// 			liquidation_info,
+	// 			liquidation_heatmap_screenshot,
+	// 		};
 
-			if let Err(e) = telegram_bot.send_alert(&token_alert).await {
-				error!("Failed to send alert for {}: {}", token_alert.liquidation_info.symbol, e);
-			}
-		}
-	});
+	// 		if let Err(e) = telegram_bot.send_alert(&token_alert).await {
+	// 			error!("Failed to send alert for {}: {}", token_alert.liquidation_info.symbol, e);
+	// 		}
+	// 	}
+	// });
 
-	binance_stream
-		.watch_market_liquidations(move |liquidation| {
-			if config.scanner.big_tokens.contains(&extract_coin_from_pair(&liquidation.symbol).to_string())
-				&& liquidation.usd_price < config.scanner.big_tokens_min_liquidation_usd_price
-			{
-				return;
-			}
+	// binance_stream
+	// 	.watch_market_liquidations(move |liquidation| {
+	// 		if config.scanner.big_tokens.contains(&extract_coin_from_pair(&liquidation.symbol).to_string())
+	// 			&& liquidation.usd_price < config.scanner.big_tokens_min_liquidation_usd_price
+	// 		{
+	// 			return;
+	// 		}
 
-			if liquidation.usd_price >= min_liquidation_usd_price {
-				match alert_tx.try_send(liquidation) {
-					Ok(()) => {},
-					Err(tokio::sync::mpsc::error::TrySendError::Full(liquidation)) => {
-						warn!("Alert queue is full; dropping alert for {}", liquidation.symbol);
-					},
-					Err(tokio::sync::mpsc::error::TrySendError::Closed(liquidation)) => {
-						warn!("Alert worker is down; dropping alert for {}", liquidation.symbol);
-					},
-				}
-			}
-		})
-		.await?;
+	// 		if liquidation.usd_price >= min_liquidation_usd_price {
+	// 			match alert_tx.try_send(liquidation) {
+	// 				Ok(()) => {},
+	// 				Err(tokio::sync::mpsc::error::TrySendError::Full(liquidation)) => {
+	// 					warn!("Alert queue is full; dropping alert for {}", liquidation.symbol);
+	// 				},
+	// 				Err(tokio::sync::mpsc::error::TrySendError::Closed(liquidation)) => {
+	// 					warn!("Alert worker is down; dropping alert for {}", liquidation.symbol);
+	// 				},
+	// 			}
+	// 		}
+	// 	})
+	// 	.await?;
 
 	Ok(())
 }

@@ -4,16 +4,20 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::error;
 
 use crate::{
-	Exchange, MarketLiquidationsInfo,
-	binance::api_schemes::{ForceOrderStream, FundingRateHistoryRequestParams, OpenInterestStatisticsRequestParams},
+	Exchange, MarketLiquidationsInfo, TickerInfo,
+	binance::api_schemes::{
+		ForceOrderStream, FundingRateHistoryRequestParams, FundingRateHistoryResponse, OpenInterestStatisticsRequestParams,
+		OpenInterestStatisticsResponse, TickerStream,
+	},
 };
 use anyhow::{Context, bail};
-use api_schemes::{FundingRateHistoryResponse, OpenInterestStatisticsResponse};
+
 mod api_schemes;
 
 const BINANCE_FUTURES_API_BASE: &str = "https://fapi.binance.com";
 
-const WS_URL: &str = "wss://fstream.binance.com/ws/!forceOrder@arr";
+const WS_TICKER_URL: &str = "wss://fstream.binance.com/ws/!ticker@arr";
+const WS_FORCE_ORDER_URL: &str = "wss://fstream.binance.com/ws/!forceOrder@arr";
 const HOURS_24: Duration = Duration::from_secs(24 * 60 * 60);
 const PING_EVERY: Duration = Duration::from_secs(60);
 const PONG_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -37,12 +41,24 @@ impl Default for BinanceExchange {
 
 #[async_trait::async_trait]
 impl Exchange for BinanceExchange {
+	async fn watch_market_tickers<F>(&self, mut callback: F) -> anyhow::Result<()>
+	where
+		F: FnMut(Vec<TickerInfo>) + Send,
+	{
+		loop {
+			if let Err(e) = run_market_tickers_stream(&mut callback).await {
+				error!("Stream error: {}, reconnecting in 5s...", e);
+				tokio::time::sleep(Duration::from_secs(5)).await;
+			}
+		}
+	}
+
 	async fn watch_market_liquidations<F>(&self, mut callback: F) -> anyhow::Result<()>
 	where
 		F: FnMut(MarketLiquidationsInfo) + Send,
 	{
 		loop {
-			if let Err(e) = run_stream(&mut callback).await {
+			if let Err(e) = run_market_liquidations_stream(&mut callback).await {
 				error!("Stream error: {}, reconnecting in 5s...", e);
 				tokio::time::sleep(Duration::from_secs(5)).await;
 			}
@@ -173,11 +189,81 @@ fn calculate_percent_change(data: &[OpenInterestStatisticsResponse], offset: usi
 	Ok(percent_change)
 }
 
-async fn run_stream<F>(callback: &mut F) -> anyhow::Result<()>
+async fn run_market_tickers_stream<F>(callback: &mut F) -> anyhow::Result<()>
+where
+	F: FnMut(Vec<TickerInfo>),
+{
+	let (ws, _) = connect_async(WS_TICKER_URL).await.context("Failed to connect")?;
+	let (mut tx, mut rx) = ws.split();
+
+	let start = Instant::now();
+	let mut last_ping = Instant::now();
+	let mut last_pong = Instant::now();
+
+	loop {
+		if start.elapsed() >= HOURS_24 {
+			let _ = tx.send(Message::Close(None)).await;
+			return Ok(());
+		}
+
+		if last_ping.elapsed() >= PING_EVERY {
+			tx.send(Message::Ping(vec![].into())).await?;
+			last_ping = Instant::now();
+		}
+
+		if last_pong.elapsed() > PONG_TIMEOUT {
+			return Err(anyhow::anyhow!("Server timeout"));
+		}
+
+		match tokio::time::timeout(Duration::from_secs(30), rx.next()).await {
+			Ok(Some(Ok(Message::Text(text)))) => {
+				if let Ok(data) = parse_tickers(&text) {
+					callback(data);
+				}
+			},
+			Ok(Some(Ok(Message::Pong(_)))) => last_pong = Instant::now(),
+			Ok(Some(Ok(Message::Ping(p)))) => {
+				tx.send(Message::Pong(p)).await?;
+				last_pong = Instant::now();
+			},
+			Ok(Some(Ok(Message::Close(_))) | None) => return Ok(()),
+			Ok(Some(Err(e))) => return Err(e.into()),
+			_ => {},
+		}
+	}
+}
+
+fn parse_tickers(text: &str) -> anyhow::Result<Vec<TickerInfo>> {
+	let data: Vec<TickerStream> =
+		serde_json::from_str(text).map_err(|error| anyhow::anyhow!("Failed to parse Vec<TickerStream> {error}"))?;
+	Ok(
+		data
+			.into_iter()
+			.map(|ticker| TickerInfo {
+				symbol: ticker.symbol,
+				price_change: ticker.price_change,
+				price_change_percent: ticker.price_change_percent,
+				weighted_average_price: ticker.weighted_average_price,
+				last_price: ticker.last_price,
+				last_quantity: ticker.last_quantity,
+				open_price: ticker.open_price,
+				high_price: ticker.high_price,
+				low_price: ticker.low_price,
+				total_traded_base_asset_volume: ticker.total_traded_base_asset_volume,
+				total_traded_quote_asset_volume: ticker.total_traded_quote_asset_volume,
+				statistics_open_time: ticker.statistics_open_time,
+				statistics_close_time: ticker.statistics_close_time,
+				total_number_of_trades: ticker.total_number_of_trades,
+			})
+			.collect(),
+	)
+}
+
+async fn run_market_liquidations_stream<F>(callback: &mut F) -> anyhow::Result<()>
 where
 	F: FnMut(MarketLiquidationsInfo),
 {
-	let (ws, _) = connect_async(WS_URL).await.context("Failed to connect")?;
+	let (ws, _) = connect_async(WS_FORCE_ORDER_URL).await.context("Failed to connect")?;
 	let (mut tx, mut rx) = ws.split();
 
 	let start = Instant::now();
