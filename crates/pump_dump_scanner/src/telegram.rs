@@ -94,10 +94,10 @@ impl TelegramBot {
 		};
 
 		format!(
-			"📈 Open Interest\n\
-			{}\n\
-			{}\n\
-			{}\n\
+			"📈 Open Interest \n\
+			{} \n\
+			{} \n\
+			{} \n\
 			{}",
 			format("15m", oi.percent_change_15_minutes),
 			format("1h", oi.percent_change_1_hour),
@@ -107,6 +107,13 @@ impl TelegramBot {
 	}
 
 	fn format_footer(&self, symbol: &str) -> String {
-		format!(r#"📊 <a href="https://www.coinglass.com/tv/Binance_{symbol}">Coinglass</a>"#)
+		let exchange = "Binance";
+		let tradingview_symbol = format!("{symbol}.P");
+
+		let coinglass_link = format!("<a href='https://www.coinglass.com/tv/{exchange}_{symbol}'>CoinGlass</a>");
+		let tradingview_link =
+			format!("<a href='https://www.tradingview.com/chart?symbol={exchange}:{tradingview_symbol}'>TradingView</a>");
+
+		format!("{coinglass_link} | {tradingview_link}")
 	}
 }
