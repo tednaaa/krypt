@@ -1,0 +1,18 @@
+tasks
+- add Bybit exchange adapter (liquidations WS + OI/funding REST)
+- add OKX exchange adapter (liquidations WS + OI/funding REST)
+- add BingX exchange adapter (liquidations WS + OI/funding REST)
+- add exchange selection + symbol normalization in config
+- research extra data tools beyond TradingView/CoinGlass/Liq Heatmap
+- integrate one new tool source into alerts (link/screenshot)
+- research Coinalyze (OI, funding, liquidations, orderbook heatmap)
+- research Laevitas (derivatives data: funding/OI/vol)
+- research CryptoQuant (exchange flows, OI, funding, on-chain)
+- research Glassnode (on-chain activity and supply metrics)
+- research Santiment (social/sentiment + on-chain)
+- research IntoTheBlock (on-chain + holder metrics)
+- research LunarCrush (social/sentiment signals)
+- research Alternative.me Fear & Greed index (market mood)
+- research WhaleAlert or Arkham (large transfer alerts)
+- research CoinGecko/CoinMarketCap APIs (market data baseline)
+- research CryptoCompare/Kaiko/CoinAPI (market data aggregators)
