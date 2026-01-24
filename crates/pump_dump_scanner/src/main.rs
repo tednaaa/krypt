@@ -44,30 +44,24 @@ async fn main() -> anyhow::Result<()> {
 	let (alert_tx, mut alert_rx) = mpsc::channel::<MarketLiquidationsInfo>(128);
 
 	tokio::spawn(async move {
-		while let Some(liquidation_info) = alert_rx.recv().await {
+		async fn handle_alert(
+			telegram_bot: &TelegramBot,
+			coinglass: &Coinglass,
+			binance_rest: &BinanceExchange,
+			liquidation_info: MarketLiquidationsInfo,
+		) -> anyhow::Result<()> {
 			let symbol = liquidation_info.symbol.clone();
 			let coin = utils::extract_coin_from_pair(&symbol);
 
-			// Coinglass screenshot is a blocking operation; avoid blocking the async runtime.
-			let liquidation_heatmap_screenshot =
-				tokio::task::block_in_place(|| coinglass.get_liquidation_heatmap_screenshot(coin));
+			let liquidation_heatmap_screenshot = tokio::task::block_in_place(|| {
+				coinglass
+					.get_liquidation_heatmap_screenshot(coin)
+					.map_err(|error| anyhow::anyhow!("Failed to get liquidation heatmap screenshot for {symbol}: {error}"))
+			})?;
 
-			let liquidation_heatmap_screenshot = match liquidation_heatmap_screenshot {
-				Ok(screenshot) => screenshot,
-				Err(e) => {
-					error!("Failed to get liquidation heatmap screenshot for {}: {}", symbol, e);
-					warn!("Skipping alert for {symbol}: no liquidation heatmap screenshot available");
-					continue;
-				},
-			};
-
-			let open_interest_info = match binance_rest.get_open_interest_info(&symbol).await {
-				Ok(info) => info,
-				Err(e) => {
-					error!("Failed to get open interest info for {}: {}", symbol, e);
-					continue;
-				},
-			};
+			let open_interest_info = binance_rest.get_open_interest_info(&symbol).await.map_err(|error| {
+				anyhow::anyhow!("Failed to get open interest info for {symbol}: {error}")
+			})?;
 
 			let token_alert = TokenAlert {
 				symbol: extract_coin_from_pair(&symbol).to_string(),
@@ -76,8 +70,17 @@ async fn main() -> anyhow::Result<()> {
 				liquidation_heatmap_screenshot,
 			};
 
-			if let Err(e) = telegram_bot.send_alert(&token_alert).await {
-				error!("Failed to send alert for {}: {}", token_alert.liquidation_info.symbol, e);
+			telegram_bot.send_alert(&token_alert).await.map_err(|error| {
+				anyhow::anyhow!("Failed to send alert for {}: {error}", token_alert.liquidation_info.symbol)
+			})?;
+
+			Ok(())
+		}
+
+		while let Some(liquidation_info) = alert_rx.recv().await {
+			if let Err(error) = handle_alert(&telegram_bot, &coinglass, &binance_rest, liquidation_info).await {
+				error!("{error:#}");
+				warn!("Skipping alert due to error");
 			}
 		}
 	});
