@@ -62,7 +62,7 @@ impl TelegramBot {
 			self.format_header(token),
 			self.format_liquidation_info(token),
 			self.format_market_stats(token),
-			self.format_footer(&token.liquidation_info.symbol),
+			self.format_footer(&token.symbol),
 		];
 
 		sections.join("\n\n")
@@ -108,12 +108,14 @@ impl TelegramBot {
 
 	fn format_footer(&self, symbol: &str) -> String {
 		let exchange = "Binance";
-		let tradingview_symbol = format!("{symbol}.P");
+		let coinglass_symbol = format!("{symbol}USDT");
+		let tradingview_symbol = format!("{symbol}USDT.P");
 
-		let coinglass_link = format!("<a href='https://www.coinglass.com/tv/{exchange}_{symbol}'>CoinGlass</a>");
+		let coinglass_link = format!("<a href='https://www.coinglass.com/tv/{exchange}_{coinglass_symbol}'>CoinGlass</a>");
 		let tradingview_link =
 			format!("<a href='https://www.tradingview.com/chart?symbol={exchange}:{tradingview_symbol}'>TradingView</a>");
+		let liquidation_heatmap_link = format!("<a href='https://www.coinglass.com/pro/futures/LiquidationHeatMap?coin={symbol}'>Liq Heatmap</a>");
 
-		format!("{coinglass_link} | {tradingview_link}")
+		format!("{coinglass_link} | {tradingview_link} | {liquidation_heatmap_link}")
 	}
 }
