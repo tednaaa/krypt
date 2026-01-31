@@ -16,7 +16,7 @@ cast_precision_loss = "allow"
 similar_names = "allow"
 
 [workspace]
-members = ["crates/coinglass", "crates/exchanges", "crates/pump_dump_scanner"]
+members = ["crates/coinglass", "crates/exchanges", "crates/mega_pump_scanner", "crates/pump_dump_scanner"]
 resolver = "3"
 
 [workspace.dependencies]
