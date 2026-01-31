@@ -4,8 +4,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::error;
 
 use crate::{
-	Exchange, MarketLiquidationsInfo,
-	binance::api_schemes::{ForceOrderStream, FundingRateHistoryRequestParams, OpenInterestStatisticsRequestParams},
+	CandleInfo, Exchange, MarketLiquidationsInfo, binance::api_schemes::{ForceOrderStream, FundingRateHistoryRequestParams, OpenInterestStatisticsRequestParams}
 };
 use anyhow::{Context, bail};
 use api_schemes::{FundingRateHistoryResponse, OpenInterestStatisticsResponse};
@@ -48,6 +47,32 @@ impl Exchange for BinanceExchange {
 			}
 		}
 	}
+
+	async fn get_klines(
+		&self,
+    symbol: &str,
+    interval: &str,
+    limit: u32,
+) -> anyhow::Result<Vec<CandleInfo>> {
+    let url = format!( "https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}" );
+
+    let response = reqwest::get(&url).await?;
+    let data: Vec<serde_json::Value> = response.json().await?;
+
+    let candles = data
+        .iter()
+        .map(|k| CandleInfo {
+            timestamp: k[0].as_i64().unwrap(),
+            open: k[1].as_str().unwrap().parse().unwrap(),
+            high: k[2].as_str().unwrap().parse().unwrap(),
+            low: k[3].as_str().unwrap().parse().unwrap(),
+            close: k[4].as_str().unwrap().parse().unwrap(),
+            volume: k[5].as_str().unwrap().parse().unwrap(),
+        })
+        .collect();
+
+    Ok(candles)
+}
 
 	async fn get_funding_rate_info(&self, symbol: &str) -> anyhow::Result<crate::FundingRateInfo> {
 		let url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/fundingRate");
