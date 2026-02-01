@@ -121,17 +121,17 @@ pub struct OpenInterestStatisticsResponse {
 }
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 pub struct KlineCandlestickRequestParams {
-	symbol: String,
+	pub symbol: String,
 	/// 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
-	interval: String,
+	pub interval: String,
 	/// default 500, max 1500
-	limit: Option<i64>,
-	start_time: Option<i64>,
-	end_time: Option<i64>,
+	pub limit: Option<i64>,
+	pub start_time: Option<i64>,
+	pub end_time: Option<i64>,
 }
 #[allow(dead_code)]
 pub type KlineCandlestickResponse = (

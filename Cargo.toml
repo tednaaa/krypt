@@ -16,7 +16,12 @@ cast_precision_loss = "allow"
 similar_names = "allow"
 
 [workspace]
-members = ["crates/coinglass", "crates/exchanges", "crates/mega_pump_scanner", "crates/pump_dump_scanner"]
+members = [
+	"crates/coinglass",
+	"crates/exchanges",
+	"crates/pump_dump_scanner",
+	"crates/scanner",
+]
 resolver = "3"
 
 [workspace.dependencies]
@@ -24,9 +29,9 @@ exchanges = { path = "crates/exchanges" }
 coinglass = { path = "crates/coinglass" }
 
 # External
-tokio = { version = "1.48.0", features = ["full"] }
+tokio = { version = "1.49.0", features = ["full"] }
 tokio-tungstenite = { version = "0.28.0", features = ["native-tls"] }
-reqwest = { version = "0.12.28", features = ["json"] }
+reqwest = { version = "0.13.1", features = ["json", "query"] }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

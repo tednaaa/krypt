@@ -59,9 +59,10 @@ async fn main() -> anyhow::Result<()> {
 					.map_err(|error| anyhow::anyhow!("Failed to get liquidation heatmap screenshot for {symbol}: {error}"))
 			})?;
 
-			let open_interest_info = binance_rest.get_open_interest_info(&symbol).await.map_err(|error| {
-				anyhow::anyhow!("Failed to get open interest info for {symbol}: {error}")
-			})?;
+			let open_interest_info = binance_rest
+				.get_open_interest_info(&symbol)
+				.await
+				.map_err(|error| anyhow::anyhow!("Failed to get open interest info for {symbol}: {error}"))?;
 
 			let token_alert = TokenAlert {
 				symbol: extract_coin_from_pair(&symbol).to_string(),

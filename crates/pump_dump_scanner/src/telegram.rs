@@ -114,7 +114,8 @@ impl TelegramBot {
 		let coinglass_link = format!("<a href='https://www.coinglass.com/tv/{exchange}_{coinglass_symbol}'>CoinGlass</a>");
 		let tradingview_link =
 			format!("<a href='https://www.tradingview.com/chart?symbol={exchange}:{tradingview_symbol}'>TradingView</a>");
-		let liquidation_heatmap_link = format!("<a href='https://www.coinglass.com/pro/futures/LiquidationHeatMap?coin={symbol}'>Liq Heatmap</a>");
+		let liquidation_heatmap_link =
+			format!("<a href='https://www.coinglass.com/pro/futures/LiquidationHeatMap?coin={symbol}'>Liq Heatmap</a>");
 
 		format!("{coinglass_link} | {tradingview_link} | {liquidation_heatmap_link}")
 	}
