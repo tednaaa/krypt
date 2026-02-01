@@ -1,27 +1,14 @@
+> Original MFI from TradingView
+
 ```
 //@version=6
-indicator("MFI", overlay=false)
-
-mfiLength = input.int(14, "MFI Period", minval=1)
-oversoldLevel = input.int(20, "Oversold Level", minval=0, maxval=100)
-overboughtLevel = input.int(80, "Overbought Level", minval=0, maxval=100)
-
-mfiValue = ta.mfi(close, mfiLength)
-
-// Зелёная зона когда MFI пересекает уровень снизу вверх
-// и продолжается пока не достигнет определенного уровня
-var bool inOversoldZone = false
-
-if ta.crossover(mfiValue, oversoldLevel)
-    inOversoldZone := true
-
-if mfiValue > 50 or mfiValue < oversoldLevel
-    inOversoldZone := false
-
-plot(mfiValue, color=color.orange, title="MFI", linewidth=2)
-hline(oversoldLevel, "Oversold", color=color.green, linestyle=hline.style_dashed)
-hline(overboughtLevel, "Overbought", color=color.red, linestyle=hline.style_dashed)
-hline(50, "Middle", color=color.gray, linestyle=hline.style_dotted)
-
-bgcolor(inOversoldZone ? color.new(color.green, 70) : na, title="Oversold Zone")
+indicator(title="Money Flow Index", shorttitle="MFI", format=format.price, precision=2, timeframe="", timeframe_gaps=true)
+length = input.int(title="Length", defval=14, minval=1, maxval=2000)
+src = hlc3
+mf = ta.mfi(src, length)
+plot(mf, "MF", color=#7E57C2)
+overbought=hline(80, title="Overbought", color=#787B86)
+hline(50, "Middle Band", color=color.new(#787B86, 50))
+oversold=hline(20, title="Oversold", color=#787B86)
+fill(overbought, oversold, color=color.rgb(126, 87, 194, 90), title="Background")
 ```

@@ -12,3 +12,5 @@ exchanges.workspace = true
 tokio.workspace = true
 
 anyhow.workspace = true
+serde.workspace = true
+chrono.workspace = true

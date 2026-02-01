@@ -1,11 +1,19 @@
 use exchanges::{BinanceExchange, Exchange};
 
+use crate::mfi::calculate_mfi;
+
+mod mfi;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
 	let binance = BinanceExchange::new();
 
-	let result = binance.get_klines("ZORAUSDT", "1h", 100).await?;
-	println!("{result:?}");
+	let test_symbol = "TRADOORUSDT";
+	let candles = binance.get_klines(test_symbol, "4h", 100).await?;
+
+	if let Some(mfi_signal) = calculate_mfi(&candles, 14) {
+		println!("{mfi_signal:?}");
+	}
 
 	Ok(())
 }
