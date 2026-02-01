@@ -1894,6 +1894,11 @@ dependencies = [
 [[package]]
 name = "scanner"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "exchanges",
+ "tokio",
+]
 
 [[package]]
 name = "schannel"

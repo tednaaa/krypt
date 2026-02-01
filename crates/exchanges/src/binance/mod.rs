@@ -59,7 +59,7 @@ impl Exchange for BinanceExchange {
 			.get(&url)
 			.query(&KlineCandlestickRequestParams {
 				symbol: String::from(symbol),
-				limit: Some(100),
+				limit: Some(limit),
 				interval: String::from(interval),
 				..Default::default()
 			})
