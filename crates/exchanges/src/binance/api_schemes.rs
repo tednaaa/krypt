@@ -123,7 +123,6 @@ pub struct OpenInterestStatisticsResponse {
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
 pub struct KlineCandlestickRequestParams {
 	pub symbol: String,
 	/// 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
@@ -133,7 +132,6 @@ pub struct KlineCandlestickRequestParams {
 	pub start_time: Option<i64>,
 	pub end_time: Option<i64>,
 }
-#[allow(dead_code)]
 pub type KlineCandlestickResponse = (
 	u64,    // Open time
 	String, // Open
@@ -146,7 +144,6 @@ pub type KlineCandlestickResponse = (
 	u64,    // Number of trades
 	String, // Taker buy base asset volume
 	String, // Taker buy quote asset volume
-	String, // Ignore
 );
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Long-Short-Ratio

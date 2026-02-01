@@ -6,7 +6,7 @@ use tracing::error;
 use crate::{
 	CandleInfo, Exchange, MarketLiquidationsInfo,
 	binance::api_schemes::{
-		ForceOrderStream, FundingRateHistoryRequestParams, KlineCandlestickRequestParams,
+		ForceOrderStream, FundingRateHistoryRequestParams, KlineCandlestickRequestParams, KlineCandlestickResponse,
 		OpenInterestStatisticsRequestParams,
 	},
 };
@@ -54,7 +54,7 @@ impl Exchange for BinanceExchange {
 
 	async fn get_klines(&self, symbol: &str, interval: &str, limit: u32) -> anyhow::Result<Vec<CandleInfo>> {
 		let url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/klines");
-		let response: Vec<FundingRateHistoryResponse> = self
+		let response: Vec<KlineCandlestickResponse> = self
 			.client
 			.get(&url)
 			.query(&KlineCandlestickRequestParams {
@@ -68,20 +68,18 @@ impl Exchange for BinanceExchange {
 			.error_for_status()?
 			.json()
 			.await
-			.context(format!("Failed to fetch funding rate info for {symbol}"))?;
+			.context(format!("Failed to fetch klines info for {symbol}"))?;
 
-		let response = reqwest::get(&url).await?;
-		let data: Vec<serde_json::Value> = response.json().await?;
-
-		let candles = data
+		let candles: Vec<CandleInfo> = response
 			.iter()
-			.map(|k| CandleInfo {
-				timestamp: k[0].as_i64().unwrap(),
-				open: k[1].as_str().unwrap().parse().unwrap(),
-				high: k[2].as_str().unwrap().parse().unwrap(),
-				low: k[3].as_str().unwrap().parse().unwrap(),
-				close: k[4].as_str().unwrap().parse().unwrap(),
-				volume: k[5].as_str().unwrap().parse().unwrap(),
+			.filter_map(|v| {
+				Some(CandleInfo {
+					open: v.1.parse().ok()?,
+					high: v.2.parse().ok()?,
+					low: v.3.parse().ok()?,
+					close: v.4.parse().ok()?,
+					volume: v.5.parse().ok()?,
+				})
 			})
 			.collect();
 
