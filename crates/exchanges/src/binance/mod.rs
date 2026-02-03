@@ -22,6 +22,7 @@ const HOURS_24: Duration = Duration::from_secs(24 * 60 * 60);
 const PING_EVERY: Duration = Duration::from_secs(60);
 const PONG_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
+#[derive(Clone)]
 pub struct BinanceExchange {
 	client: reqwest::Client,
 }

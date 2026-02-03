@@ -1946,6 +1946,8 @@ dependencies = [
  "anyhow",
  "chrono",
  "exchanges",
+ "futures",
+ "rayon",
  "serde",
  "tokio",
 ]
