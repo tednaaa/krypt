@@ -1,0 +1,18 @@
+[package]
+name = "scanner"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+exchanges.workspace = true
+
+tokio.workspace = true
+rayon.workspace = true
+futures.workspace = true
+
+anyhow.workspace = true
+serde.workspace = true
+chrono.workspace = true

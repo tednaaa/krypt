@@ -1,11 +1,15 @@
 use futures_util::{SinkExt, StreamExt};
+use rayon::prelude::*;
 use tokio::time::{Duration, Instant};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::error;
 
 use crate::{
-	Exchange, MarketLiquidationsInfo,
-	binance::api_schemes::{ForceOrderStream, FundingRateHistoryRequestParams, OpenInterestStatisticsRequestParams},
+	CandleInfo, Exchange, MarketLiquidationsInfo,
+	binance::api_schemes::{
+		ExchangeInfoResponse, ForceOrderStream, FundingRateHistoryRequestParams, KlineCandlestickRequestParams,
+		KlineCandlestickResponse, OpenInterestStatisticsRequestParams, SymbolInfoStatus,
+	},
 };
 use anyhow::{Context, bail};
 use api_schemes::{FundingRateHistoryResponse, OpenInterestStatisticsResponse};
@@ -18,6 +22,7 @@ const HOURS_24: Duration = Duration::from_secs(24 * 60 * 60);
 const PING_EVERY: Duration = Duration::from_secs(60);
 const PONG_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
+#[derive(Clone)]
 pub struct BinanceExchange {
 	client: reqwest::Client,
 }
@@ -37,6 +42,21 @@ impl Default for BinanceExchange {
 
 #[async_trait::async_trait]
 impl Exchange for BinanceExchange {
+	async fn get_all_usdt_pairs(&self) -> anyhow::Result<Vec<String>> {
+		let url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/exchangeInfo");
+		let response: ExchangeInfoResponse =
+			self.client.get(&url).send().await?.error_for_status()?.json().await.context("Failed to fetch exchange info")?;
+
+		let pairs = response
+			.symbols
+			.into_par_iter()
+			.filter(|symbol| symbol.quote_asset == "USDT" && symbol.status == SymbolInfoStatus::Trading)
+			.map(|symbol| symbol.symbol)
+			.collect();
+
+		Ok(pairs)
+	}
+
 	async fn watch_market_liquidations<F>(&self, mut callback: F) -> anyhow::Result<()>
 	where
 		F: FnMut(MarketLiquidationsInfo) + Send,
@@ -47,6 +67,40 @@ impl Exchange for BinanceExchange {
 				tokio::time::sleep(Duration::from_secs(5)).await;
 			}
 		}
+	}
+
+	async fn get_klines(&self, symbol: &str, interval: &str, limit: u32) -> anyhow::Result<Vec<CandleInfo>> {
+		let url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/klines");
+		let response: Vec<KlineCandlestickResponse> = self
+			.client
+			.get(&url)
+			.query(&KlineCandlestickRequestParams {
+				symbol: String::from(symbol),
+				limit: Some(limit),
+				interval: String::from(interval),
+				..Default::default()
+			})
+			.send()
+			.await?
+			.error_for_status()?
+			.json()
+			.await
+			.context(format!("Failed to fetch klines info for {symbol}"))?;
+
+		let candles: Vec<CandleInfo> = response
+			.iter()
+			.filter_map(|v| {
+				Some(CandleInfo {
+					open: v.1.parse().ok()?,
+					high: v.2.parse().ok()?,
+					low: v.3.parse().ok()?,
+					close: v.4.parse().ok()?,
+					volume: v.5.parse().ok()?,
+				})
+			})
+			.collect();
+
+		Ok(candles)
 	}
 
 	async fn get_funding_rate_info(&self, symbol: &str) -> anyhow::Result<crate::FundingRateInfo> {
