@@ -1,5 +1,5 @@
 [package]
-name = "scanner"
+name = "scanner_api"
 version = "0.1.0"
 edition = "2024"
 
@@ -16,3 +16,4 @@ futures.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 chrono.workspace = true
+actix-web = "4"

@@ -9,12 +9,13 @@ pub struct ExchangeInfoResponse {
 #[serde(rename_all = "camelCase")]
 pub struct SymbolInfo {
 	pub symbol: String,
+	#[allow(dead_code)]
 	pub pair: String,
 	pub quote_asset: String,
 	pub status: SymbolInfoStatus,
 }
 // [...new Set($json.data.symbols.map(s => s.status))] in Firefox
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SymbolInfoStatus {
 	Trading,
