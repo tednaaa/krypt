@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use anyhow::{Context, anyhow};
 use chrono::Utc;
-use futures::stream::{self, StreamExt};
 use exchanges::{BinanceExchange, Exchange};
+use futures::stream::{self, StreamExt};
 
 use crate::mfi::calculate_mfi;
 use crate::models::{PairUpdate, icon_url};
@@ -79,7 +79,5 @@ async fn fetch_mfi(binance: &BinanceExchange, pair: &str, interval: &str) -> any
 		.await
 		.with_context(|| format!("Failed to fetch klines for {pair} ({interval})"))?;
 
-	calculate_mfi(&candles, MFI_LENGTH)
-		.ok_or_else(|| anyhow!("Insufficient candle data for {pair} ({interval})"))
+	calculate_mfi(&candles, MFI_LENGTH).ok_or_else(|| anyhow!("Insufficient candle data for {pair} ({interval})"))
 }
-

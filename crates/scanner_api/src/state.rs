@@ -22,17 +22,9 @@ impl AppState {
 		pairs.values().cloned().collect()
 	}
 
-	pub async fn apply_update(
-		&self,
-		pair: String,
-		icon: String,
-		update: PairUpdate,
-		updated_at: DateTime<Utc>,
-	) {
+	pub async fn apply_update(&self, pair: String, icon: String, update: PairUpdate, updated_at: DateTime<Utc>) {
 		let mut pairs = self.pairs.write().await;
-		let entry = pairs
-			.entry(pair.clone())
-			.or_insert_with(|| PairSnapshot::new(pair, icon.clone(), updated_at));
+		let entry = pairs.entry(pair.clone()).or_insert_with(|| PairSnapshot::new(pair, icon.clone(), updated_at));
 
 		entry.icon = icon;
 		if let Some(value) = update.mfi_1h {
@@ -52,9 +44,8 @@ impl AppState {
 
 	pub async fn favorite_pair(&self, pair: &str) -> PairSnapshot {
 		let mut pairs = self.pairs.write().await;
-		let entry = pairs
-			.entry(pair.to_string())
-			.or_insert_with(|| PairSnapshot::new(pair.to_string(), icon_url(pair), Utc::now()));
+		let entry =
+			pairs.entry(pair.to_string()).or_insert_with(|| PairSnapshot::new(pair.to_string(), icon_url(pair), Utc::now()));
 		entry.is_favorite = true;
 		entry.clone()
 	}
@@ -68,9 +59,8 @@ impl AppState {
 
 	pub async fn add_comment(&self, pair: &str, comment: String) -> PairSnapshot {
 		let mut pairs = self.pairs.write().await;
-		let entry = pairs
-			.entry(pair.to_string())
-			.or_insert_with(|| PairSnapshot::new(pair.to_string(), icon_url(pair), Utc::now()));
+		let entry =
+			pairs.entry(pair.to_string()).or_insert_with(|| PairSnapshot::new(pair.to_string(), icon_url(pair), Utc::now()));
 		entry.comments.push(comment);
 		entry.clone()
 	}
