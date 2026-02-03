@@ -188,8 +188,9 @@ onMounted(() => {
           <TableRow v-for="pair in filteredPairs" :key="pair.pair">
             <TableCell>
               <div class="flex items-center gap-3">
-                <img :src="pair.icon" :alt="pair.pair" class="size-6 rounded-full" />
+                <!-- <img :src="pair.icon" :alt="pair.pair" class="size-6 rounded-full" /> -->
                 <span class="font-medium">{{ pair.pair }}</span>
+                <a class="text-blue-500 font-semibold" :href="`https://www.tradingview.com/chart?symbol=Binance:${pair.pair}.P`" target="_blank">TV</a>
               </div>
             </TableCell>
             <TableCell>
