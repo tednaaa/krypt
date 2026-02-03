@@ -16,3 +16,4 @@ futures.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 chrono.workspace = true
+actix-web = "4"

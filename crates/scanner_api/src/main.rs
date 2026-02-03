@@ -1,32 +1,31 @@
-use futures::stream::{self, StreamExt};
+use actix_web::{App, HttpServer, web};
+use exchanges::BinanceExchange;
 
-use exchanges::{BinanceExchange, Exchange};
+use crate::api::get_pairs;
+use crate::fetcher::spawn_refresh_loop;
+use crate::state::AppState;
 
-use crate::mfi::calculate_mfi;
-
+mod api;
+mod fetcher;
 mod mfi;
+mod models;
+mod state;
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> anyhow::Result<()> {
+	let state = AppState::new();
 	let binance = BinanceExchange::new();
 
-	let usdt_pairs = binance.get_all_usdt_pairs().await?;
+	spawn_refresh_loop(state.clone(), binance);
 
-	stream::iter(usdt_pairs)
-		.for_each_concurrent(10, |pair| {
-			let binance = binance.clone();
-			async move {
-				match binance.get_klines(&pair, "1d", 100).await {
-					Ok(candles) => {
-						if let Some(mfi_signal) = calculate_mfi(&candles, 14) {
-							println!("{pair} | {mfi_signal:?}");
-						}
-					},
-					Err(e) => eprintln!("Error fetching {pair}: {e}"),
-				}
-			}
-		})
-		.await;
+	HttpServer::new(move || {
+		App::new()
+			.app_data(web::Data::new(state.clone()))
+			.route("/pairs", web::get().to(get_pairs))
+	})
+	.bind(("0.0.0.0", 8080))?
+	.run()
+	.await?;
 
 	Ok(())
 }
