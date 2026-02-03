@@ -1,5 +1,27 @@
 use serde::{Deserialize, Serialize};
 
+// https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Exchange-Information
+#[derive(Debug, Deserialize)]
+pub struct ExchangeInfoResponse {
+	pub symbols: Vec<SymbolInfo>,
+}
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolInfo {
+	pub symbol: String,
+	pub pair: String,
+	pub quote_asset: String,
+	pub status: SymbolInfoStatus,
+}
+// [...new Set($json.data.symbols.map(s => s.status))] in Firefox
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SymbolInfoStatus {
+	Trading,
+	Settling,
+	PendingTrading,
+}
+
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]

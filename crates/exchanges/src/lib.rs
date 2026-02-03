@@ -1,9 +1,10 @@
-mod binance;
-
 pub use binance::BinanceExchange;
+
+mod binance;
 
 #[async_trait::async_trait]
 pub trait Exchange {
+	async fn get_all_usdt_pairs(&self) -> anyhow::Result<Vec<String>>;
 	async fn watch_market_liquidations<F>(&self, callback: F) -> anyhow::Result<()>
 	where
 		F: FnMut(MarketLiquidationsInfo) + Send;

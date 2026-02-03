@@ -1,4 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
+use rayon::prelude::*;
 use tokio::time::{Duration, Instant};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::error;
@@ -6,8 +7,8 @@ use tracing::error;
 use crate::{
 	CandleInfo, Exchange, MarketLiquidationsInfo,
 	binance::api_schemes::{
-		ForceOrderStream, FundingRateHistoryRequestParams, KlineCandlestickRequestParams, KlineCandlestickResponse,
-		OpenInterestStatisticsRequestParams,
+		ExchangeInfoResponse, ForceOrderStream, FundingRateHistoryRequestParams, KlineCandlestickRequestParams,
+		KlineCandlestickResponse, OpenInterestStatisticsRequestParams, SymbolInfoStatus,
 	},
 };
 use anyhow::{Context, bail};
@@ -40,6 +41,21 @@ impl Default for BinanceExchange {
 
 #[async_trait::async_trait]
 impl Exchange for BinanceExchange {
+	async fn get_all_usdt_pairs(&self) -> anyhow::Result<Vec<String>> {
+		let url = format!("{BINANCE_FUTURES_API_BASE}/fapi/v1/exchangeInfo");
+		let response: ExchangeInfoResponse =
+			self.client.get(&url).send().await?.error_for_status()?.json().await.context("Failed to fetch exchange info")?;
+
+		let pairs = response
+			.symbols
+			.into_par_iter()
+			.filter(|symbol| symbol.quote_asset == "USDT" && symbol.status == SymbolInfoStatus::Trading)
+			.map(|symbol| symbol.symbol)
+			.collect();
+
+		Ok(pairs)
+	}
+
 	async fn watch_market_liquidations<F>(&self, mut callback: F) -> anyhow::Result<()>
 	where
 		F: FnMut(MarketLiquidationsInfo) + Send,
