@@ -8,4 +8,4 @@
   </p>
 </template>
 
-<style scoped></style>
+<style module></style>
