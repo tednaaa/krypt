@@ -6,7 +6,7 @@ use futures::stream::{self, StreamExt};
 use exchanges::{BinanceExchange, Exchange};
 
 use crate::mfi::calculate_mfi;
-use crate::models::PairUpdate;
+use crate::models::{PairUpdate, icon_url};
 use crate::state::AppState;
 
 const KLINE_LIMIT: u32 = 100;
@@ -83,7 +83,3 @@ async fn fetch_mfi(binance: &BinanceExchange, pair: &str, interval: &str) -> any
 		.ok_or_else(|| anyhow!("Insufficient candle data for {pair} ({interval})"))
 }
 
-fn icon_url(pair: &str) -> String {
-	let base = pair.strip_suffix("USDT").unwrap_or(pair);
-	format!("https://cdn.coinglasscdn.com/static/img/coins/{base}.png")
-}

@@ -9,6 +9,8 @@ pub struct PairSnapshot {
 	pub mfi_4h: f64,
 	pub mfi_1d: f64,
 	pub mfi_1w: f64,
+	pub is_favorite: bool,
+	pub comments: Vec<String>,
 	pub updated_at: DateTime<Utc>,
 }
 
@@ -22,6 +24,8 @@ impl PairSnapshot {
 			mfi_4h: 0.0,
 			mfi_1d: 0.0,
 			mfi_1w: 0.0,
+			is_favorite: false,
+			comments: Vec::new(),
 			updated_at,
 		}
 	}
@@ -43,6 +47,8 @@ pub struct PairResponse {
 	pub mfi_4h: f64,
 	pub mfi_1d: f64,
 	pub mfi_1w: f64,
+	pub is_favorite: bool,
+	pub comments: Vec<String>,
 }
 
 impl From<&PairSnapshot> for PairResponse {
@@ -54,6 +60,8 @@ impl From<&PairSnapshot> for PairResponse {
 			mfi_4h: snapshot.mfi_4h,
 			mfi_1d: snapshot.mfi_1d,
 			mfi_1w: snapshot.mfi_1w,
+			is_favorite: snapshot.is_favorite,
+			comments: snapshot.comments.clone(),
 		}
 	}
 }
@@ -76,4 +84,10 @@ pub enum SortDirection {
 pub struct SortField {
 	pub key: SortKey,
 	pub direction: SortDirection,
+}
+
+#[must_use]
+pub fn icon_url(pair: &str) -> String {
+	let base = pair.strip_suffix("USDT").unwrap_or(pair);
+	format!("https://cdn.coinglasscdn.com/static/img/coins/{base}.png")
 }

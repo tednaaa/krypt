@@ -11,6 +11,11 @@ pub struct PairsQuery {
 	pub sort: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CommentPayload {
+	pub comment: String,
+}
+
 #[derive(Debug)]
 struct SortParseError {
 	message: String,
@@ -41,6 +46,48 @@ pub async fn get_pairs(state: web::Data<AppState>, query: web::Query<PairsQuery>
 	}
 
 	Ok(HttpResponse::Ok().json(pairs))
+}
+
+pub async fn favorite_pair(state: web::Data<AppState>, pair: web::Path<String>) -> Result<impl Responder, Error> {
+	let updated = state.favorite_pair(pair.as_str()).await;
+	Ok(HttpResponse::Ok().json(PairResponse::from(&updated)))
+}
+
+pub async fn unfavorite_pair(state: web::Data<AppState>, pair: web::Path<String>) -> Result<impl Responder, Error> {
+	match state.unfavorite_pair(pair.as_str()).await {
+		Some(updated) => Ok(HttpResponse::Ok().json(PairResponse::from(&updated))),
+		None => Err(actix_web::error::ErrorNotFound("Pair not found")),
+	}
+}
+
+pub async fn add_comment(
+	state: web::Data<AppState>,
+	pair: web::Path<String>,
+	payload: web::Json<CommentPayload>,
+) -> Result<impl Responder, Error> {
+	let comment = payload.comment.trim();
+	if comment.is_empty() {
+		return Err(actix_web::error::ErrorBadRequest("Comment cannot be empty"));
+	}
+
+	let updated = state.add_comment(pair.as_str(), comment.to_string()).await;
+	Ok(HttpResponse::Ok().json(PairResponse::from(&updated)))
+}
+
+pub async fn remove_comment(
+	state: web::Data<AppState>,
+	pair: web::Path<String>,
+	payload: web::Json<CommentPayload>,
+) -> Result<impl Responder, Error> {
+	let comment = payload.comment.trim();
+	if comment.is_empty() {
+		return Err(actix_web::error::ErrorBadRequest("Comment cannot be empty"));
+	}
+
+	match state.remove_comment(pair.as_str(), comment).await {
+		Some(updated) => Ok(HttpResponse::Ok().json(PairResponse::from(&updated))),
+		None => Err(actix_web::error::ErrorNotFound("Comment or pair not found")),
+	}
 }
 
 fn parse_sort_fields(raw: &str) -> Result<Vec<SortField>, SortParseError> {
@@ -159,6 +206,8 @@ mod tests {
 				mfi_4h: 60.0,
 				mfi_1d: 50.0,
 				mfi_1w: 30.0,
+				is_favorite: false,
+				comments: Vec::new(),
 			},
 			PairResponse {
 				icon: "b".to_string(),
@@ -167,6 +216,8 @@ mod tests {
 				mfi_4h: 60.0,
 				mfi_1d: 80.0,
 				mfi_1w: 30.0,
+				is_favorite: false,
+				comments: Vec::new(),
 			},
 			PairResponse {
 				icon: "c".to_string(),
@@ -175,6 +226,8 @@ mod tests {
 				mfi_4h: 20.0,
 				mfi_1d: 80.0,
 				mfi_1w: 70.0,
+				is_favorite: false,
+				comments: Vec::new(),
 			},
 		];
 
