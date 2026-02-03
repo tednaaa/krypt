@@ -20,7 +20,7 @@ members = [
 	"crates/coinglass",
 	"crates/exchanges",
 	"crates/pump_dump_scanner",
-	"crates/scanner",
+	"crates/scanner_api",
 ]
 resolver = "3"
 

@@ -1940,7 +1940,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scanner"
+name = "scanner_api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
