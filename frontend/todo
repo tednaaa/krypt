@@ -1,0 +1,6 @@
+- tailwind
+- shadcn-vue
+- vitest + playwright
+- zod
+- axios api
+- envs config
