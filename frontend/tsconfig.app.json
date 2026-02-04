@@ -10,7 +10,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "vueCompilerOptions": {
+    "plugins": [
+      "vue-router/volar/sfc-typed-router",
+      "vue-router/volar/sfc-route-blocks",
+    ],
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "src/globals/*.d.ts"],
 }
