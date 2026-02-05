@@ -1,0 +1,1 @@
+export { PairsService } from './service';

@@ -1,0 +1,1 @@
+export { FavoritesService } from './service';
