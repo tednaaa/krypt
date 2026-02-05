@@ -3,7 +3,6 @@ import type { ColumnDef, RowSelectionState, SortingState, VisibilityState } from
 import {
   FlexRender,
   getCoreRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useVueTable,
 } from '@tanstack/vue-table';
@@ -33,14 +32,14 @@ const table = useVueTable({
   get data() { return props.data; },
   get columns() { return props.columns; },
   getCoreRowModel: getCoreRowModel(),
-  getPaginationRowModel: getPaginationRowModel(),
+  // getPaginationRowModel: getPaginationRowModel(),
   getSortedRowModel: getSortedRowModel(),
   onSortingChange: updaterOrValue => valueUpdater(updaterOrValue, sorting),
   onColumnVisibilityChange: updaterOrValue => valueUpdater(updaterOrValue, columnVisibility),
   onRowSelectionChange: updaterOrValue => valueUpdater(updaterOrValue, rowSelection),
   state: {
     get sorting() { return sorting.value; },
-    get columnVisibility() { return columnVisibility.value; },
+    // get columnVisibility() { return columnVisibility.value; },
     get rowSelection() { return rowSelection.value; },
   },
 });
