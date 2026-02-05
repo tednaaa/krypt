@@ -1,0 +1,4 @@
+overrides: npm:rolldown-vite@7.2.5
+
+packages:
+  - "frontend"
