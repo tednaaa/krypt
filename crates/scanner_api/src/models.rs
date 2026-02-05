@@ -53,13 +53,15 @@ pub struct PairResponse {
 
 impl From<&PairSnapshot> for PairResponse {
 	fn from(snapshot: &PairSnapshot) -> Self {
+		let format_mfi = |value: f64| (value * 100.0).round() / 100.0;
+
 		Self {
 			icon: snapshot.icon.clone(),
 			pair: snapshot.pair.clone(),
-			mfi_1h: snapshot.mfi_1h,
-			mfi_4h: snapshot.mfi_4h,
-			mfi_1d: snapshot.mfi_1d,
-			mfi_1w: snapshot.mfi_1w,
+			mfi_1h: format_mfi(snapshot.mfi_1h),
+			mfi_4h: format_mfi(snapshot.mfi_4h),
+			mfi_1d: format_mfi(snapshot.mfi_1d),
+			mfi_1w: format_mfi(snapshot.mfi_1w),
 			is_favorite: snapshot.is_favorite,
 			comments: snapshot.comments.clone(),
 		}
