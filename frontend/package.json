@@ -10,6 +10,7 @@
   "dependencies": {
     "@pinia/colada": "0.21.2",
     "@tailwindcss/vite": "4.1.18",
+    "@tanstack/vue-table": "8.21.3",
     "@vueuse/core": "14.2.0",
     "axios": "1.13.4",
     "class-variance-authority": "0.7.1",

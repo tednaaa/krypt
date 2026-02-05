@@ -1,6 +1,6 @@
 import z from 'zod';
 
-export const PairsResponse = z.object({
+export const PairSchema = z.object({
   icon: z.string(),
   pair: z.string(),
   mfi_1h: z.float64(),
@@ -10,3 +10,7 @@ export const PairsResponse = z.object({
   is_favorite: z.boolean(),
   comments: z.array(z.string()),
 });
+export type Pair = z.infer<typeof PairSchema>;
+
+export const PairsResponseSchema = z.array(PairSchema);
+export type PairsResponse = z.infer<typeof PairsResponseSchema>;
