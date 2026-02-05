@@ -7,9 +7,11 @@ import {
   useVueTable,
 } from '@tanstack/vue-table';
 
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 import { valueUpdater } from '@/shared/lib/utils';
+import { Button } from '@/shared/ui/button';
 import {
   Table,
   TableBody,
@@ -24,13 +26,28 @@ const props = defineProps<{
   data: TData[];
 }>();
 
-const sorting = ref<SortingState>([]);
+const sorting = defineModel<SortingState>('sorting', { default: [] });
 const columnVisibility = ref<VisibilityState>({});
 const rowSelection = ref<RowSelectionState>({});
+
+function getSortIcon(sorted: false | 'asc' | 'desc') {
+  if (sorted === 'asc') {
+    return ArrowUpIcon;
+  }
+
+  if (sorted === 'desc') {
+    return ArrowDownIcon;
+  }
+
+  return ArrowUpDownIcon;
+}
 
 const table = useVueTable({
   get data() { return props.data; },
   get columns() { return props.columns; },
+
+  manualSorting: true,
+
   getCoreRowModel: getCoreRowModel(),
   // getPaginationRowModel: getPaginationRowModel(),
   getSortedRowModel: getSortedRowModel(),
@@ -59,8 +76,25 @@ defineExpose({
         <TableHeader>
           <TableRow v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id">
             <TableHead v-for="header in headerGroup.headers" :key="header.id">
+              <div v-if="header.isPlaceholder" />
+              <Button
+                v-else-if="header.column.getCanSort()"
+                variant="ghost"
+                size="sm"
+                class="h-8 px-2 -ml-2"
+                @click="header.column.getToggleSortingHandler()?.($event)"
+              >
+                <FlexRender
+                  :render="header.column.columnDef.header"
+                  :props="header.getContext()"
+                />
+                <component
+                  :is="getSortIcon(header.column.getIsSorted())"
+                  class="size-4 text-muted-foreground"
+                />
+              </Button>
               <FlexRender
-                v-if="!header.isPlaceholder"
+                v-else
                 :render="header.column.columnDef.header"
                 :props="header.getContext()"
               />

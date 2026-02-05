@@ -8,6 +8,7 @@ export const columns: ColumnDef<Pair>[] = [
   {
     accessorKey: 'is_favorite',
     header: '',
+    enableSorting: false,
     cell: ({ row }) => {
       const pair = row.getValue<string>('pair');
 
@@ -20,6 +21,7 @@ export const columns: ColumnDef<Pair>[] = [
   {
     accessorKey: 'comments',
     header: '',
+    enableSorting: false,
     cell: ({ row }) => {
       const pair = row.getValue<string>('pair');
 
@@ -32,14 +34,15 @@ export const columns: ColumnDef<Pair>[] = [
   {
     accessorKey: 'pair',
     header: 'Symbol',
+    enableSorting: false,
     cell: ({ row }) => {
       const pair = row.getValue<string>('pair');
 
       return h('div', pair);
     },
   },
-  { accessorKey: 'mfi_1h', header: 'MFI (1h)' },
-  { accessorKey: 'mfi_4h', header: 'MFI (4h)' },
-  { accessorKey: 'mfi_1d', header: 'MFI (1d)' },
-  { accessorKey: 'mfi_1w', header: 'MFI (1w)' },
+  { accessorKey: 'mfi_1h', header: 'MFI (1h)', enableMultiSort: true },
+  { accessorKey: 'mfi_4h', header: 'MFI (4h)', enableMultiSort: true },
+  { accessorKey: 'mfi_1d', header: 'MFI (1d)', enableMultiSort: true },
+  { accessorKey: 'mfi_1w', header: 'MFI (1w)', enableMultiSort: true },
 ];
