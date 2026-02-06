@@ -35,6 +35,7 @@ export const useGetPairs = defineQuery(() => {
     key: computed(() => [...PAIRS_QUERY_KEYS.root, params.value]),
     query: () => PairsService.getPairs(params.value),
     placeholderData: previousData => previousData,
+    autoRefetch: true,
   });
 
   return { ...rest, pairs: state, sorting, isShowingFavorites };

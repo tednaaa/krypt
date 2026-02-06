@@ -36,6 +36,9 @@ importers:
       '@pinia/colada':
         specifier: 0.21.2
         version: 0.21.2(pinia@3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3)))(vue@3.5.27(typescript@5.9.3))
+      '@pinia/colada-plugin-auto-refetch':
+        specifier: 0.2.4
+        version: 0.2.4(@pinia/colada@0.21.2(pinia@3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3)))(vue@3.5.27(typescript@5.9.3)))
       '@tailwindcss/vite':
         specifier: 4.1.18
         version: 4.1.18(rolldown-vite@7.3.1(@types/node@24.10.1)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.2))
@@ -567,6 +570,11 @@ packages:
 
   '@oxc-project/types@0.101.0':
     resolution: {integrity: sha512-nuFhqlUzJX+gVIPPfuE6xurd4lST3mdcWOhyK/rZO0B9XWMKm79SuszIQEnSMmmDhq1DC8WWVYGVd+6F93o1gQ==}
+
+  '@pinia/colada-plugin-auto-refetch@0.2.4':
+    resolution: {integrity: sha512-+/XTIX+7gaRt6vXyqAyXDjujjVU+EyHM3851zdlD/qsoHjt9V5VgjOPnUWwtAwHjipd5jfkCoDN3uyVEsxiOqA==}
+    peerDependencies:
+      '@pinia/colada': '>=0.17.7'
 
   '@pinia/colada@0.21.2':
     resolution: {integrity: sha512-k2epk1jed5cTmNA7l00UtsFRyqw9HfyU6WO4cV0BMUT3sSE4CMLCilprbLAL5h2bxD76WSiglciI/6o+Uh7Vzw==}
@@ -3371,6 +3379,10 @@ snapshots:
   '@oxc-project/runtime@0.101.0': {}
 
   '@oxc-project/types@0.101.0': {}
+
+  '@pinia/colada-plugin-auto-refetch@0.2.4(@pinia/colada@0.21.2(pinia@3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3)))(vue@3.5.27(typescript@5.9.3)))':
+    dependencies:
+      '@pinia/colada': 0.21.2(pinia@3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3)))(vue@3.5.27(typescript@5.9.3))
 
   '@pinia/colada@0.21.2(pinia@3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3)))(vue@3.5.27(typescript@5.9.3))':
     dependencies:
