@@ -26,7 +26,8 @@ const bingxUrl = computed(() => `https://bingx.com/en/perpetual/${props.token}-U
       <Pair :token="props.token" :img-src="props.pairImgSrc" />
     </PopoverTrigger>
     <PopoverContent align="start">
-      <h4>{{ props.token }}</h4>
+      <Pair :token="props.token" :img-src="props.pairImgSrc" />
+
       <hr class="my-4">
       <div class="flex flex-col gap-2">
         <Link
