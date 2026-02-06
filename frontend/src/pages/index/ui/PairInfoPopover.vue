@@ -22,7 +22,7 @@ const bingxUrl = computed(() => `https://bingx.com/en/perpetual/${props.token}-U
 
 <template>
   <Popover>
-    <PopoverTrigger class="font-medium cursor-pointer hover:text-blue-600 ">
+    <PopoverTrigger class="flex font-medium cursor-pointer hover:text-blue-600 ">
       <Pair :token="props.token" :img-src="props.pairImgSrc" />
     </PopoverTrigger>
     <PopoverContent align="start">

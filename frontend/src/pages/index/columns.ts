@@ -17,7 +17,7 @@ export const columns: ColumnDef<Pair>[] = [
       return h(Button, {
         variant: 'ghost',
         size: 'icon',
-      }, () => [h(StarIcon)]);
+      }, () => [h(StarIcon, { class: 'size-5' })]);
     },
   },
   {
@@ -30,7 +30,7 @@ export const columns: ColumnDef<Pair>[] = [
       return h(Button, {
         variant: 'ghost',
         size: 'icon',
-      }, () => [h(MessageCircleIcon)]);
+      }, () => [h(MessageCircleIcon, { class: 'size-5' })]);
     },
   },
   {
