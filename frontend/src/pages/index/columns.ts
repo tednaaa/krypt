@@ -1,9 +1,10 @@
 import type { ColumnDef } from '@tanstack/vue-table';
 import type { Pair } from '@/shared/api/pairs';
-import { MessageCircleIcon, StarIcon } from 'lucide-vue-next';
+import { MessageCircleIcon } from 'lucide-vue-next';
 import { h } from 'vue';
 import { extractTokenFromPair } from '@/shared/lib/pairs/extractTokenFromPair';
 import { Button } from '@/shared/ui/button';
+import FavoriteButton from './ui/FavoriteButton.vue';
 import PairInfoPopover from './ui/PairInfoPopover.vue';
 
 export const columns: ColumnDef<Pair>[] = [
@@ -12,12 +13,10 @@ export const columns: ColumnDef<Pair>[] = [
     header: '',
     enableSorting: false,
     cell: ({ row }) => {
-      row.getValue<string>('pair');
+      const pair = row.getValue<string>('pair');
+      const isFavorite = row.getValue<boolean>('is_favorite');
 
-      return h(Button, {
-        variant: 'ghost',
-        size: 'icon',
-      }, () => [h(StarIcon, { class: 'size-5' })]);
+      return h(FavoriteButton, { pair, isFavorite });
     },
   },
   {
