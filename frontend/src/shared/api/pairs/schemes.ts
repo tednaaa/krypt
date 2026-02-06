@@ -14,3 +14,8 @@ export type Pair = z.infer<typeof PairSchema>;
 
 export const PairsResponseSchema = z.array(PairSchema);
 export type PairsResponse = z.infer<typeof PairsResponseSchema>;
+
+export interface PairQueryParams {
+  sort?: string;
+  favorite?: boolean;
+}

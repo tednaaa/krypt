@@ -1,3 +1,7 @@
+# for app
+state.json
+
+
 # Devenv
 .devenv*
 devenv.local.nix

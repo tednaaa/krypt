@@ -41,13 +41,8 @@ pub async fn get_pairs(state: web::Data<AppState>, query: web::Query<PairsQuery>
 		None => Vec::new(),
 	};
 
-	let mut pairs: Vec<PairResponse> = state
-		.list_pairs()
-		.await
-		.iter()
-		.filter(|pair| matches_filters(pair, &query))
-		.map(PairResponse::from)
-		.collect();
+	let mut pairs: Vec<PairResponse> =
+		state.list_pairs().await.iter().filter(|pair| matches_filters(pair, &query)).map(PairResponse::from).collect();
 
 	if !sort_fields.is_empty() {
 		sort_pairs(&mut pairs, &sort_fields);
@@ -113,10 +108,6 @@ pub async fn remove_comment(
 }
 
 fn matches_filters(pair: &PairSnapshot, query: &PairsQuery) -> bool {
-	if query.favorite.is_none() && query.has_comments.is_none() {
-		return pair.is_favorite;
-	}
-
 	if let Some(is_favorite) = query.favorite {
 		if pair.is_favorite != is_favorite {
 			return false;
@@ -301,13 +292,13 @@ mod tests {
 	}
 
 	#[test]
-	fn matches_filters_defaults_to_favorites() {
-		let pair = sample_pair("AAAUSDT", true, &[]);
+	fn matches_filters_defaults_to_all() {
 		let query = PairsQuery { sort: None, favorite: None, has_comments: None };
+		let pair = sample_pair("AAAUSDT", true, &[]);
 		assert!(matches_filters(&pair, &query));
 
 		let pair = sample_pair("BBBUSD", false, &[]);
-		assert!(!matches_filters(&pair, &query));
+		assert!(matches_filters(&pair, &query));
 	}
 
 	#[test]
