@@ -40,6 +40,8 @@ async fn refresh_pairs(state: &AppState, binance: &BinanceExchange) -> anyhow::R
 		})
 		.await;
 
+	state.persist().await.context("Failed to persist refreshed state")?;
+
 	Ok(())
 }
 

@@ -3,12 +3,14 @@ use std::cmp::Ordering;
 use actix_web::{Error, HttpResponse, Responder, web};
 use serde::Deserialize;
 
-use crate::models::{PairResponse, SortDirection, SortField, SortKey};
+use crate::models::{PairResponse, PairSnapshot, SortDirection, SortField, SortKey};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct PairsQuery {
 	pub sort: Option<String>,
+	pub favorite: Option<bool>,
+	pub has_comments: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,7 +41,13 @@ pub async fn get_pairs(state: web::Data<AppState>, query: web::Query<PairsQuery>
 		None => Vec::new(),
 	};
 
-	let mut pairs: Vec<PairResponse> = state.list_pairs().await.iter().map(PairResponse::from).collect();
+	let mut pairs: Vec<PairResponse> = state
+		.list_pairs()
+		.await
+		.iter()
+		.filter(|pair| matches_filters(pair, &query))
+		.map(PairResponse::from)
+		.collect();
 
 	if !sort_fields.is_empty() {
 		sort_pairs(&mut pairs, &sort_fields);
@@ -49,12 +57,19 @@ pub async fn get_pairs(state: web::Data<AppState>, query: web::Query<PairsQuery>
 }
 
 pub async fn favorite_pair(state: web::Data<AppState>, pair: web::Path<String>) -> Result<impl Responder, Error> {
-	let updated = state.favorite_pair(pair.as_str()).await;
+	let updated = state
+		.favorite_pair(pair.as_str())
+		.await
+		.map_err(|err| actix_web::error::ErrorInternalServerError(err.to_string()))?;
 	Ok(HttpResponse::Ok().json(PairResponse::from(&updated)))
 }
 
 pub async fn unfavorite_pair(state: web::Data<AppState>, pair: web::Path<String>) -> Result<impl Responder, Error> {
-	match state.unfavorite_pair(pair.as_str()).await {
+	match state
+		.unfavorite_pair(pair.as_str())
+		.await
+		.map_err(|err| actix_web::error::ErrorInternalServerError(err.to_string()))?
+	{
 		Some(updated) => Ok(HttpResponse::Ok().json(PairResponse::from(&updated))),
 		None => Err(actix_web::error::ErrorNotFound("Pair not found")),
 	}
@@ -70,7 +85,10 @@ pub async fn add_comment(
 		return Err(actix_web::error::ErrorBadRequest("Comment cannot be empty"));
 	}
 
-	let updated = state.add_comment(pair.as_str(), comment.to_string()).await;
+	let updated = state
+		.add_comment(pair.as_str(), comment.to_string())
+		.await
+		.map_err(|err| actix_web::error::ErrorInternalServerError(err.to_string()))?;
 	Ok(HttpResponse::Ok().json(PairResponse::from(&updated)))
 }
 
@@ -84,10 +102,35 @@ pub async fn remove_comment(
 		return Err(actix_web::error::ErrorBadRequest("Comment cannot be empty"));
 	}
 
-	match state.remove_comment(pair.as_str(), comment).await {
+	match state
+		.remove_comment(pair.as_str(), comment)
+		.await
+		.map_err(|err| actix_web::error::ErrorInternalServerError(err.to_string()))?
+	{
 		Some(updated) => Ok(HttpResponse::Ok().json(PairResponse::from(&updated))),
 		None => Err(actix_web::error::ErrorNotFound("Comment or pair not found")),
 	}
+}
+
+fn matches_filters(pair: &PairSnapshot, query: &PairsQuery) -> bool {
+	if query.favorite.is_none() && query.has_comments.is_none() {
+		return pair.is_favorite;
+	}
+
+	if let Some(is_favorite) = query.favorite {
+		if pair.is_favorite != is_favorite {
+			return false;
+		}
+	}
+
+	if let Some(has_comments) = query.has_comments {
+		let pair_has_comments = !pair.comments.is_empty();
+		if pair_has_comments != has_comments {
+			return false;
+		}
+	}
+
+	true
 }
 
 fn parse_sort_fields(raw: &str) -> Result<Vec<SortField>, SortParseError> {
@@ -168,7 +211,8 @@ fn compare_f64(left: f64, right: f64) -> Ordering {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::models::PairResponse;
+	use crate::models::{PairResponse, PairSnapshot};
+	use chrono::Utc;
 
 	#[test]
 	fn parse_sort_fields_multi() {
@@ -240,5 +284,51 @@ mod tests {
 		assert_eq!(pairs[0].pair, "BBBUSDT");
 		assert_eq!(pairs[1].pair, "CCCUSDT");
 		assert_eq!(pairs[2].pair, "AAAUSDT");
+	}
+
+	fn sample_pair(pair: &str, is_favorite: bool, comments: &[&str]) -> PairSnapshot {
+		PairSnapshot {
+			icon: "icon".to_string(),
+			pair: pair.to_string(),
+			mfi_1h: 0.0,
+			mfi_4h: 0.0,
+			mfi_1d: 0.0,
+			mfi_1w: 0.0,
+			is_favorite,
+			comments: comments.iter().map(|value| (*value).to_string()).collect(),
+			updated_at: Utc::now(),
+		}
+	}
+
+	#[test]
+	fn matches_filters_defaults_to_favorites() {
+		let pair = sample_pair("AAAUSDT", true, &[]);
+		let query = PairsQuery { sort: None, favorite: None, has_comments: None };
+		assert!(matches_filters(&pair, &query));
+
+		let pair = sample_pair("BBBUSD", false, &[]);
+		assert!(!matches_filters(&pair, &query));
+	}
+
+	#[test]
+	fn matches_filters_comments_only() {
+		let query = PairsQuery { sort: None, favorite: None, has_comments: Some(true) };
+		let with_comments = sample_pair("AAAUSDT", false, &["note"]);
+		let without_comments = sample_pair("BBBUSD", false, &[]);
+
+		assert!(matches_filters(&with_comments, &query));
+		assert!(!matches_filters(&without_comments, &query));
+	}
+
+	#[test]
+	fn matches_filters_favorites_and_comments() {
+		let query = PairsQuery { sort: None, favorite: Some(true), has_comments: Some(true) };
+		let matching = sample_pair("AAAUSDT", true, &["note"]);
+		let missing_favorite = sample_pair("BBBUSD", false, &["note"]);
+		let missing_comment = sample_pair("CCCUSD", true, &[]);
+
+		assert!(matches_filters(&matching, &query));
+		assert!(!matches_filters(&missing_favorite, &query));
+		assert!(!matches_filters(&missing_comment, &query));
 	}
 }

@@ -15,7 +15,7 @@ mod state;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-	let state = AppState::new();
+	let state = AppState::load("state.json").await?;
 	let binance = BinanceExchange::new();
 
 	spawn_refresh_loop(state.clone(), binance);

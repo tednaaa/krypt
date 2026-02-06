@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PairSnapshot {
 	pub icon: String,
 	pub pair: String,
@@ -31,7 +31,7 @@ impl PairSnapshot {
 	}
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct PairUpdate {
 	pub mfi_1h: Option<f64>,
 	pub mfi_4h: Option<f64>,
