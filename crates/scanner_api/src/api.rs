@@ -125,9 +125,7 @@ fn parse_sort_key(value: &str) -> Result<SortKey, SortParseError> {
 		"mfi_4h" => Ok(SortKey::Mfi4h),
 		"mfi_1d" => Ok(SortKey::Mfi1d),
 		"mfi_1w" => Ok(SortKey::Mfi1w),
-		_ => Err(SortParseError::new(format!(
-			"Unsupported sort field: {value}. Use mfi_1h, mfi_4h, mfi_1d, or mfi_1w.",
-		))),
+		_ => Err(SortParseError::new(format!("Unsupported sort field: {value}. Use mfi_1h, mfi_4h, mfi_1d, or mfi_1w.",))),
 	}
 }
 

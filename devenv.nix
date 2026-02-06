@@ -15,5 +15,13 @@
     };
   };
 
+  processes = {
+    scanner_api.exec = ''
+      cargo run --bin scanner_api
+    '';
+
+    frontend.exec = "cd frontend && pnpm dev";
+  };
+
   packages = [ pkgs.openssl ];
 }
