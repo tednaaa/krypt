@@ -1,3 +1,5 @@
+/// <reference types="vitest/config" />
+
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
@@ -16,5 +18,25 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+
+  // @ts-expect-error TODO: strange error
+  test: {
+    globals: true,
+    mockReset: true,
+    clearMocks: true,
+    restoreMocks: true,
+    open: false,
+    projects: [
+      {
+        extends: true,
+        test: {
+          include: ['src/**/*.spec.ts'],
+          setupFiles: ['./spec.setup.ts'],
+          name: 'unit',
+          environment: 'jsdom',
+        },
+      },
+    ],
   },
 });
