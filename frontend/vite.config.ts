@@ -10,6 +10,7 @@ export default defineConfig({
   plugins: [
     VueRouter({
       dts: 'src/globals/route-map.d.ts',
+      exclude: ['src/pages/**/ui/*.vue'],
     }),
     vue(),
     tailwindcss(),

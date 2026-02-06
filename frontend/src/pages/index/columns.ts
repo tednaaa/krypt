@@ -2,8 +2,9 @@ import type { ColumnDef } from '@tanstack/vue-table';
 import type { Pair } from '@/shared/api/pairs';
 import { MessageCircleIcon, StarIcon } from 'lucide-vue-next';
 import { h } from 'vue';
+import { extractTokenFromPair } from '@/shared/lib/pairs/extractTokenFromPair';
 import { Button } from '@/shared/ui/button';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/shared/ui/hover-card';
+import PairInfoPopover from './ui/PairInfoPopover.vue';
 
 export const columns: ColumnDef<Pair>[] = [
   {
@@ -38,33 +39,7 @@ export const columns: ColumnDef<Pair>[] = [
     enableSorting: false,
     cell: ({ row }) => {
       const pair = row.getValue<string>('pair');
-      const exchange = 'Binance';
-      const coinglassSymbol = `${pair}`;
-      const tradingviewSymbol = `${pair}.P`;
-
-      return h(HoverCard, null, [
-        h(HoverCardTrigger, { class: 'cursor-pointer hover:underline' }, pair),
-        h(HoverCardContent, { class: 'w-auto' }, h('div', { class: 'flex flex-col gap-2' }, [
-          h('a', {
-            href: `https://www.coinglass.com/tv/${exchange}_${coinglassSymbol}`,
-            target: '_blank',
-            rel: 'noopener noreferrer',
-            class: 'text-blue-600 hover:text-blue-800',
-          }, 'CoinGlass'),
-          h('a', {
-            href: `https://www.tradingview.com/chart?symbol=${exchange}:${tradingviewSymbol}`,
-            target: '_blank',
-            rel: 'noopener noreferrer',
-            class: 'text-blue-600 hover:text-blue-800',
-          }, 'TradingView'),
-          h('a', {
-            href: `https://www.coinglass.com/pro/futures/LiquidationHeatMap?coin=${pair}`,
-            target: '_blank',
-            rel: 'noopener noreferrer',
-            class: 'text-blue-600 hover:text-blue-800',
-          }, 'Liquidations HeatMap'),
-        ])),
-      ]);
+      return h(PairInfoPopover, { token: extractTokenFromPair(pair) });
     },
   },
   { accessorKey: 'mfi_1h', header: 'MFI (1h)', enableMultiSort: true },
