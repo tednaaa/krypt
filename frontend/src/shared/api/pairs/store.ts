@@ -25,6 +25,7 @@ export const useGetPairs = defineQuery(() => {
   const sortParam = computed(() => buildPairsSortParam(sorting.value));
 
   const isShowingFavorites = ref(false);
+  const searchQuery = ref('');
 
   const params = computed<PairQueryParams>(() => ({
     sort: sortParam.value,
@@ -38,5 +39,12 @@ export const useGetPairs = defineQuery(() => {
     autoRefetch: true,
   });
 
-  return { ...rest, pairs: state, sorting, isShowingFavorites };
+  const foundPairs = computed(() => {
+    if (state.value.status !== 'success')
+      return [];
+
+    return state.value.data.filter(({ pair }) => pair.toLowerCase().includes(searchQuery.value.toLowerCase()));
+  });
+
+  return { ...rest, pairs: state, sorting, isShowingFavorites, searchQuery, foundPairs };
 });
