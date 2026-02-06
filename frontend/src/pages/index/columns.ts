@@ -39,7 +39,10 @@ export const columns: ColumnDef<Pair>[] = [
     enableSorting: false,
     cell: ({ row }) => {
       const pair = row.getValue<string>('pair');
-      return h(PairInfoPopover, { token: extractTokenFromPair(pair) });
+      return h(PairInfoPopover, {
+        token: extractTokenFromPair(pair),
+        pairImgSrc: row.original.icon,
+      });
     },
   },
   { accessorKey: 'mfi_1h', header: 'MFI (1h)', enableMultiSort: true },

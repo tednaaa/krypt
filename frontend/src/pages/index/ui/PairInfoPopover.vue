@@ -2,9 +2,11 @@
 import { computed } from 'vue';
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/ui/popover';
 import Link from './Link.vue';
+import Pair from './Pair.vue';
 
 const props = defineProps<{
   token: string;
+  pairImgSrc: string;
 }>();
 
 const exchange = 'Binance';
@@ -20,7 +22,9 @@ const bingxUrl = computed(() => `https://bingx.com/en/perpetual/${props.token}-U
 
 <template>
   <Popover>
-    <PopoverTrigger class="font-medium cursor-pointer hover:text-blue-600 ">{{ props.token }}</PopoverTrigger>
+    <PopoverTrigger class="font-medium cursor-pointer hover:text-blue-600 ">
+      <Pair :token="props.token" :img-src="props.pairImgSrc" />
+    </PopoverTrigger>
     <PopoverContent align="start">
       <h4>{{ props.token }}</h4>
       <hr class="my-4">

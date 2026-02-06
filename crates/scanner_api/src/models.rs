@@ -91,5 +91,5 @@ pub struct SortField {
 #[must_use]
 pub fn icon_url(pair: &str) -> String {
 	let base = pair.strip_suffix("USDT").unwrap_or(pair);
-	format!("https://cdn.coinglasscdn.com/static/img/coins/{base}.png")
+	format!("https://static-app.bb-os.com/icon/{base}.png")
 }
