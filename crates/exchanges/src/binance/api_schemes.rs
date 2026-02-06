@@ -21,6 +21,9 @@ pub enum SymbolInfoStatus {
 	Trading,
 	Settling,
 	PendingTrading,
+	PreSettle,
+	#[serde(other)]
+	Unknown,
 }
 
 // https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
