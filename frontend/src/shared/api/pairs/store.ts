@@ -6,6 +6,7 @@ import { PairsService } from './service';
 
 export const PAIRS_QUERY_KEYS = {
   root: ['pairs'] as const,
+  all: (params: PairQueryParams) => [...PAIRS_QUERY_KEYS.root, params] as const,
 };
 
 const SORTABLE_FIELDS = new Set(['price', 'mfi_1h', 'mfi_4h', 'mfi_1d', 'mfi_1w']);
@@ -33,7 +34,7 @@ export const useGetPairs = defineQuery(() => {
   }));
 
   const { state, ...rest } = useQuery({
-    key: computed(() => [...PAIRS_QUERY_KEYS.root, params.value]),
+    key: () => PAIRS_QUERY_KEYS.all(params.value),
     query: () => PairsService.getPairs(params.value),
     placeholderData: previousData => previousData,
     autoRefetch: true,
