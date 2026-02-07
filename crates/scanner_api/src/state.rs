@@ -60,6 +60,9 @@ impl AppState {
 		let entry = pairs.entry(pair.clone()).or_insert_with(|| PairSnapshot::new(pair, icon.clone(), updated_at));
 
 		entry.icon = icon;
+		if let Some(value) = update.price {
+			entry.price = value;
+		}
 		if let Some(value) = update.mfi_1h {
 			entry.mfi_1h = value;
 		}

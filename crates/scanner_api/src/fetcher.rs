@@ -14,6 +14,11 @@ const MFI_LENGTH: usize = 14;
 const PAIR_CONCURRENCY: usize = 10;
 const REFRESH_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
+struct MfiSnapshot {
+	value: f64,
+	price: f64,
+}
+
 pub fn spawn_refresh_loop(state: AppState, binance: BinanceExchange) {
 	tokio::spawn(async move {
 		let mut interval = tokio::time::interval(REFRESH_INTERVAL);
@@ -52,22 +57,25 @@ async fn refresh_pair(state: &AppState, binance: &BinanceExchange, pair: &str) -
 	let mut update = PairUpdate::default();
 
 	match fetch_mfi(binance, pair, "1h").await {
-		Ok(value) => update.mfi_1h = Some(value),
+		Ok(snapshot) => {
+			update.mfi_1h = Some(snapshot.value);
+			update.price = Some(snapshot.price);
+		},
 		Err(err) => eprintln!("MFI 1h fetch failed for {pair}: {err}"),
 	}
 
 	match fetch_mfi(binance, pair, "4h").await {
-		Ok(value) => update.mfi_4h = Some(value),
+		Ok(snapshot) => update.mfi_4h = Some(snapshot.value),
 		Err(err) => eprintln!("MFI 4h fetch failed for {pair}: {err}"),
 	}
 
 	match fetch_mfi(binance, pair, "1d").await {
-		Ok(value) => update.mfi_1d = Some(value),
+		Ok(snapshot) => update.mfi_1d = Some(snapshot.value),
 		Err(err) => eprintln!("MFI 1d fetch failed for {pair}: {err}"),
 	}
 
 	match fetch_mfi(binance, pair, "1w").await {
-		Ok(value) => update.mfi_1w = Some(value),
+		Ok(snapshot) => update.mfi_1w = Some(snapshot.value),
 		Err(err) => eprintln!("MFI 1w fetch failed for {pair}: {err}"),
 	}
 
@@ -75,11 +83,17 @@ async fn refresh_pair(state: &AppState, binance: &BinanceExchange, pair: &str) -
 	Ok(())
 }
 
-async fn fetch_mfi(binance: &BinanceExchange, pair: &str, interval: &str) -> anyhow::Result<f64> {
+async fn fetch_mfi(binance: &BinanceExchange, pair: &str, interval: &str) -> anyhow::Result<MfiSnapshot> {
 	let candles = binance
 		.get_klines(pair, interval, KLINE_LIMIT)
 		.await
 		.with_context(|| format!("Failed to fetch klines for {pair} ({interval})"))?;
 
-	calculate_mfi(&candles, MFI_LENGTH).ok_or_else(|| anyhow!("Insufficient candle data for {pair} ({interval})"))
+	let price = candles
+		.last()
+		.map(|candle| candle.open)
+		.ok_or_else(|| anyhow!("No candle data for {pair} ({interval})"))?;
+	let value = calculate_mfi(&candles, MFI_LENGTH).ok_or_else(|| anyhow!("Insufficient candle data for {pair} ({interval})"))?;
+
+	Ok(MfiSnapshot { value, price })
 }

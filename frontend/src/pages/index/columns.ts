@@ -44,6 +44,12 @@ export const columns: ColumnDef<Pair>[] = [
       });
     },
   },
+  {
+    accessorKey: 'price',
+    header: 'Price',
+    cell: ({ row }) => `$${Number.parseFloat(row.getValue<number>('price').toFixed(4))}`,
+    enableMultiSort: true,
+  },
   { accessorKey: 'mfi_1h', header: 'MFI (1h)', enableMultiSort: true },
   { accessorKey: 'mfi_4h', header: 'MFI (4h)', enableMultiSort: true },
   { accessorKey: 'mfi_1d', header: 'MFI (1d)', enableMultiSort: true },

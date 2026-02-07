@@ -8,7 +8,7 @@ export const PAIRS_QUERY_KEYS = {
   root: ['pairs'] as const,
 };
 
-const SORTABLE_FIELDS = new Set(['mfi_1h', 'mfi_4h', 'mfi_1d', 'mfi_1w']);
+const SORTABLE_FIELDS = new Set(['price', 'mfi_1h', 'mfi_4h', 'mfi_1d', 'mfi_1w']);
 
 export function buildPairsSortParam(sorting: SortingState) {
   if (!sorting.length)

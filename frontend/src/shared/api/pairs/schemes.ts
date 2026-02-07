@@ -3,6 +3,7 @@ import z from 'zod';
 export const PairSchema = z.object({
   icon: z.string(),
   pair: z.string(),
+  price: z.float64(),
   mfi_1h: z.float64(),
   mfi_4h: z.float64(),
   mfi_1d: z.float64(),

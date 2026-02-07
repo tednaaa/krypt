@@ -14,6 +14,14 @@ describe('buildPairsSortParam', () => {
     expect(buildPairsSortParam(sorting)).toBe('mfi_1h:desc,mfi_4h:asc');
   });
 
+  it('supports price sorting', () => {
+    const sorting = [
+      { id: 'price', desc: true },
+    ];
+
+    expect(buildPairsSortParam(sorting)).toBe('price:desc');
+  });
+
   it('skips unsupported fields', () => {
     const sorting = [
       { id: 'pair', desc: true },

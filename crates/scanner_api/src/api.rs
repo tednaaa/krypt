@@ -36,10 +36,8 @@ impl std::fmt::Display for SortParseError {
 }
 
 pub async fn get_pairs(state: web::Data<AppState>, query: web::Query<PairsQuery>) -> Result<impl Responder, Error> {
-	let sort_fields = match query.sort.as_deref() {
-		Some(value) => parse_sort_fields(value).map_err(|err| actix_web::error::ErrorBadRequest(err.to_string()))?,
-		None => Vec::new(),
-	};
+	let sort_fields =
+		resolve_sort_fields(query.sort.as_deref()).map_err(|err| actix_web::error::ErrorBadRequest(err.to_string()))?;
 
 	let mut pairs: Vec<PairResponse> =
 		state.list_pairs().await.iter().filter(|pair| matches_filters(pair, &query)).map(PairResponse::from).collect();
@@ -155,11 +153,14 @@ fn parse_sort_fields(raw: &str) -> Result<Vec<SortField>, SortParseError> {
 
 fn parse_sort_key(value: &str) -> Result<SortKey, SortParseError> {
 	match value {
+		"price" => Ok(SortKey::Price),
 		"mfi_1h" => Ok(SortKey::Mfi1h),
 		"mfi_4h" => Ok(SortKey::Mfi4h),
 		"mfi_1d" => Ok(SortKey::Mfi1d),
 		"mfi_1w" => Ok(SortKey::Mfi1w),
-		_ => Err(SortParseError::new(format!("Unsupported sort field: {value}. Use mfi_1h, mfi_4h, mfi_1d, or mfi_1w.",))),
+		_ => Err(SortParseError::new(format!(
+			"Unsupported sort field: {value}. Use price, mfi_1h, mfi_4h, mfi_1d, or mfi_1w.",
+		))),
 	}
 }
 
@@ -178,6 +179,7 @@ fn sort_pairs(pairs: &mut [PairResponse], sort_fields: &[SortField]) {
 fn compare_pairs(left: &PairResponse, right: &PairResponse, sort_fields: &[SortField]) -> Ordering {
 	for field in sort_fields {
 		let ordering = match field.key {
+			SortKey::Price => compare_f64(left.price, right.price),
 			SortKey::Mfi1h => compare_f64(left.mfi_1h, right.mfi_1h),
 			SortKey::Mfi4h => compare_f64(left.mfi_4h, right.mfi_4h),
 			SortKey::Mfi1d => compare_f64(left.mfi_1d, right.mfi_1d),
@@ -197,6 +199,20 @@ fn compare_pairs(left: &PairResponse, right: &PairResponse, sort_fields: &[SortF
 
 fn compare_f64(left: f64, right: f64) -> Ordering {
 	left.partial_cmp(&right).unwrap_or(Ordering::Equal)
+}
+
+fn resolve_sort_fields(raw: Option<&str>) -> Result<Vec<SortField>, SortParseError> {
+	match raw.map(str::trim).filter(|value| !value.is_empty()) {
+		Some(value) => {
+			let fields = parse_sort_fields(value)?;
+			if fields.is_empty() {
+				Ok(vec![SortField { key: SortKey::Price, direction: SortDirection::Desc }])
+			} else {
+				Ok(fields)
+			}
+		},
+		None => Ok(vec![SortField { key: SortKey::Price, direction: SortDirection::Desc }]),
+	}
 }
 
 #[cfg(test)]
@@ -224,6 +240,12 @@ mod tests {
 	}
 
 	#[test]
+	fn parse_sort_fields_supports_price() {
+		let fields = parse_sort_fields("price:asc").unwrap();
+		assert_eq!(fields, vec![SortField { key: SortKey::Price, direction: SortDirection::Asc }]);
+	}
+
+	#[test]
 	fn parse_sort_fields_rejects_unknown_field() {
 		let error = parse_sort_fields("foo:asc").unwrap_err();
 		assert!(error.to_string().contains("Unsupported sort field"));
@@ -235,6 +257,7 @@ mod tests {
 			PairResponse {
 				icon: "a".to_string(),
 				pair: "AAAUSDT".to_string(),
+				price: 200.0,
 				mfi_1h: 10.0,
 				mfi_4h: 60.0,
 				mfi_1d: 50.0,
@@ -245,6 +268,7 @@ mod tests {
 			PairResponse {
 				icon: "b".to_string(),
 				pair: "BBBUSDT".to_string(),
+				price: 50.0,
 				mfi_1h: 5.0,
 				mfi_4h: 60.0,
 				mfi_1d: 80.0,
@@ -255,6 +279,7 @@ mod tests {
 			PairResponse {
 				icon: "c".to_string(),
 				pair: "CCCUSDT".to_string(),
+				price: 300.0,
 				mfi_1h: 12.0,
 				mfi_4h: 20.0,
 				mfi_1d: 80.0,
@@ -268,6 +293,7 @@ mod tests {
 			SortField { key: SortKey::Mfi1d, direction: SortDirection::Desc },
 			SortField { key: SortKey::Mfi4h, direction: SortDirection::Desc },
 			SortField { key: SortKey::Mfi1h, direction: SortDirection::Asc },
+			SortField { key: SortKey::Price, direction: SortDirection::Desc },
 		];
 
 		sort_pairs(&mut pairs, &sort_fields);
@@ -277,10 +303,23 @@ mod tests {
 		assert_eq!(pairs[2].pair, "AAAUSDT");
 	}
 
+	#[test]
+	fn resolve_sort_fields_defaults_to_price_desc() {
+		let fields = resolve_sort_fields(None).unwrap();
+		assert_eq!(fields, vec![SortField { key: SortKey::Price, direction: SortDirection::Desc }]);
+	}
+
+	#[test]
+	fn resolve_sort_fields_defaults_for_empty_string() {
+		let fields = resolve_sort_fields(Some(" , ")).unwrap();
+		assert_eq!(fields, vec![SortField { key: SortKey::Price, direction: SortDirection::Desc }]);
+	}
+
 	fn sample_pair(pair: &str, is_favorite: bool, comments: &[&str]) -> PairSnapshot {
 		PairSnapshot {
 			icon: "icon".to_string(),
 			pair: pair.to_string(),
+			price: 0.0,
 			mfi_1h: 0.0,
 			mfi_4h: 0.0,
 			mfi_1d: 0.0,

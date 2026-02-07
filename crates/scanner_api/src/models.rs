@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 pub struct PairSnapshot {
 	pub icon: String,
 	pub pair: String,
+	#[serde(default)]
+	pub price: f64,
 	pub mfi_1h: f64,
 	pub mfi_4h: f64,
 	pub mfi_1d: f64,
@@ -20,6 +22,7 @@ impl PairSnapshot {
 		Self {
 			icon,
 			pair,
+			price: 0.0,
 			mfi_1h: 0.0,
 			mfi_4h: 0.0,
 			mfi_1d: 0.0,
@@ -33,6 +36,7 @@ impl PairSnapshot {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct PairUpdate {
+	pub price: Option<f64>,
 	pub mfi_1h: Option<f64>,
 	pub mfi_4h: Option<f64>,
 	pub mfi_1d: Option<f64>,
@@ -43,6 +47,7 @@ pub struct PairUpdate {
 pub struct PairResponse {
 	pub icon: String,
 	pub pair: String,
+	pub price: f64,
 	pub mfi_1h: f64,
 	pub mfi_4h: f64,
 	pub mfi_1d: f64,
@@ -58,6 +63,7 @@ impl From<&PairSnapshot> for PairResponse {
 		Self {
 			icon: snapshot.icon.clone(),
 			pair: snapshot.pair.clone(),
+			price: snapshot.price,
 			mfi_1h: format_mfi(snapshot.mfi_1h),
 			mfi_4h: format_mfi(snapshot.mfi_4h),
 			mfi_1d: format_mfi(snapshot.mfi_1d),
@@ -70,6 +76,7 @@ impl From<&PairSnapshot> for PairResponse {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SortKey {
+	Price,
 	Mfi1h,
 	Mfi4h,
 	Mfi1d,
@@ -92,4 +99,30 @@ pub struct SortField {
 pub fn icon_url(pair: &str) -> String {
 	let base = pair.strip_suffix("USDT").unwrap_or(pair);
 	format!("https://static-app.bb-os.com/icon/{base}.png")
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use chrono::Utc;
+
+	#[test]
+	fn pair_response_includes_price() {
+		let snapshot = PairSnapshot {
+			icon: "icon".to_string(),
+			pair: "AAAUSDT".to_string(),
+			price: 123.456,
+			mfi_1h: 10.0,
+			mfi_4h: 20.0,
+			mfi_1d: 30.0,
+			mfi_1w: 40.0,
+			is_favorite: false,
+			comments: Vec::new(),
+			updated_at: Utc::now(),
+		};
+
+		let response = PairResponse::from(&snapshot);
+
+		assert_eq!(response.price, 123.456);
+	}
 }
