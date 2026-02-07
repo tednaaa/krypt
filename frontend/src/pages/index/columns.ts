@@ -5,6 +5,7 @@ import { h } from 'vue';
 import { extractTokenFromPair } from '@/shared/lib/pairs/extractTokenFromPair';
 import { Button } from '@/shared/ui/button';
 import FavoriteButton from './ui/FavoriteButton.vue';
+import MfiInfo from './ui/MfiInfo.vue';
 import PairInfoPopover from './ui/PairInfoPopover.vue';
 
 export const columns: ColumnDef<Pair>[] = [
@@ -50,8 +51,36 @@ export const columns: ColumnDef<Pair>[] = [
     cell: ({ row }) => `$${Number.parseFloat(row.getValue<number>('price').toFixed(4))}`,
     enableMultiSort: true,
   },
-  { accessorKey: 'mfi_1h', header: 'MFI (1h)', enableMultiSort: true },
-  { accessorKey: 'mfi_4h', header: 'MFI (4h)', enableMultiSort: true },
-  { accessorKey: 'mfi_1d', header: 'MFI (1d)', enableMultiSort: true },
-  { accessorKey: 'mfi_1w', header: 'MFI (1w)', enableMultiSort: true },
+  {
+    accessorKey: 'mfi_1h',
+    header: 'MFI (1h)',
+    enableMultiSort: true,
+    cell: ({ row }) => {
+      return h(MfiInfo, { mfi: row.getValue<number>('mfi_1h') });
+    },
+  },
+  {
+    accessorKey: 'mfi_4h',
+    header: 'MFI (4h)',
+    enableMultiSort: true,
+    cell: ({ row }) => {
+      return h(MfiInfo, { mfi: row.getValue<number>('mfi_4h') });
+    },
+  },
+  {
+    accessorKey: 'mfi_1d',
+    header: 'MFI (1d)',
+    enableMultiSort: true,
+    cell: ({ row }) => {
+      return h(MfiInfo, { mfi: row.getValue<number>('mfi_1d') });
+    },
+  },
+  {
+    accessorKey: 'mfi_1w',
+    header: 'MFI (1w)',
+    enableMultiSort: true,
+    cell: ({ row }) => {
+      return h(MfiInfo, { mfi: row.getValue<number>('mfi_1w') });
+    },
+  },
 ];
